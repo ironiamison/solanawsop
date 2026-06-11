@@ -152,9 +152,18 @@ const FAQ_ITEMS = [
           program, public account state, SPL vault).
         </p>
         <p className="mb-2">
-          <strong>Card dealing</strong> — not casino-grade yet: hole cards are on-chain
-          (readable before showdown) and shuffle uses a slot-based seed, not VRF. We
-          document this openly and are shipping VRF + commit–reveal.
+          <strong>Card dealing</strong> — cash tables use on-chain VRF shuffle, deck
+          commitments, and commit–reveal hole cards. We are waiting for an independent
+          security audit; auditors can contact us on{" "}
+          <a
+            href="https://x.com/solanawsop"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-violet-400 underline hover:text-violet-300"
+          >
+            @solanawsop
+          </a>
+          .
         </p>
         <a href="/fairness" className="text-violet-400 underline hover:text-violet-300">
           Read what you can verify today →

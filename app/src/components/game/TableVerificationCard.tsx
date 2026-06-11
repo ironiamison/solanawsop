@@ -84,12 +84,12 @@ export default function TableVerificationCard({
           <p className="text-[10px] text-zinc-600">Your next action appears on Solscan.</p>
         )}
         <Link href="/fairness" className="text-[10px] font-semibold text-zinc-500 hover:text-violet-300">
-          Full fairness & limits →
+          Fairness & audit info →
         </Link>
       </div>
 
-      <p className="mt-2 text-[9px] leading-relaxed text-amber-200/70">
-        Shuffle uses slot-based seed today; VRF + hidden hole cards on roadmap. See docs.
+      <p className="mt-2 text-[9px] leading-relaxed text-emerald-200/70">
+        On-chain VRF shuffle + commit–reveal dealing. Independent audit in progress.
       </p>
     </div>
   );

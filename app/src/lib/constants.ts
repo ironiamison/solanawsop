@@ -20,6 +20,9 @@ export const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || undefined;
 /** Product brand */
 export const BRAND_NAME =
   process.env.NEXT_PUBLIC_BRAND_NAME ?? "SolanaWSOP";
+
+export const TWITTER_URL = "https://x.com/solanawsop";
+export const TWITTER_HANDLE = "solanawsop";
 export const BRAND_TAGLINE = "On-chain escrow · open rules";
 export const BRAND_LOGO_SRC = "/assets/brand/solanawsop-logo.png";
 /** Transparent trim for demo / overlay surfaces */

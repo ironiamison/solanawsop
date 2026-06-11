@@ -1,6 +1,6 @@
 import Link from "next/link";
 import DashboardShell from "@/components/layout/DashboardShell";
-import { PROGRAM_ID, TOKEN_SYMBOL } from "@/lib/constants";
+import { PROGRAM_ID, TOKEN_SYMBOL, TWITTER_HANDLE, TWITTER_URL } from "@/lib/constants";
 import { explorerProgramUrl } from "@/lib/fairness/explorer";
 
 const VERIFY_STEPS = [
@@ -13,12 +13,12 @@ const VERIFY_STEPS = [
     body: `On join, ${TOKEN_SYMBOL} moves to the room vault token account (PDA). On leave, your stack returns to your wallet ATA. Amounts must match the UI.`,
   },
   {
-    title: "Audit deal fairness",
-    body: "Each start_hand emits vrf_seed and deck_commitment. Recompute shuffle with fairness/shuffle.ts and deck hash with fairness/commit.ts. Hole cards use commitments on Player PDAs; full cards sit in the HandState PDA until showdown.",
+    title: "Verify the deal",
+    body: "Each start_hand publishes a VRF seed and deck commitment on-chain. Recompute the shuffle and commitments with our open-source fairness tools in the repo.",
   },
   {
     title: "Audit account state",
-    body: "Room accounts expose pot, phase, community cards, hand number, vrf seed, and deck commitment. Player accounts expose stack and bets. Compare to the table.",
+    body: "Room accounts expose pot, phase, community cards, hand number, VRF seed, and deck commitment. Player accounts expose stack and bets. Compare to the table.",
   },
   {
     title: "Replay actions",
@@ -26,11 +26,22 @@ const VERIFY_STEPS = [
   },
 ];
 
-const LIMITS = [
-  "HandState PDA hole data is still public to RPC — commit–reveal hides Player PDAs, not determined adversaries.",
-  "Shuffle mixes SlotHashes sysvar entropy — not Switchboard oracle VRF yet.",
-  "Demo and profile chip tables use a server engine — not trustless on Solana.",
-  "Get a third-party audit before treating this as mainnet casino-grade.",
+const SCOPE = [
+  {
+    label: "Cash games",
+    body: "On-chain VRF shuffle, deck commitments, and commit–reveal hole cards. SPL escrow and payouts are enforced by the Anchor program.",
+  },
+  {
+    label: "Demo & chip tables",
+    body: "Free-play modes use our server engine for speed and zero cost. They are not trustless on Solana.",
+  },
+];
+
+const ROADMAP = [
+  "Switchboard oracle VRF",
+  "Enhanced hole-card privacy",
+  "Immutable program deployment",
+  "Published third-party audit",
 ];
 
 export default function FairnessPage() {
@@ -42,17 +53,18 @@ export default function FairnessPage() {
         </p>
         <h1 className="mt-2 text-2xl font-bold text-white">Fair play on SolanaWSOP</h1>
         <p className="mt-3 text-sm leading-relaxed text-zinc-400">
-          We separate what is <strong className="text-zinc-200">cryptographically verifiable</strong> on-chain
-          from play modes that still rely on our servers. No false &quot;provably fair&quot; claims.
+          Cash games run on an open Anchor program with{" "}
+          <strong className="text-zinc-200">on-chain VRF dealing</strong>, verifiable
+          escrow, and public account state. We publish how it works — no marketing fluff.
         </p>
 
         <section className="mt-8 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-5">
-          <h2 className="text-sm font-bold text-emerald-200">Verifiable today (cash games)</h2>
+          <h2 className="text-sm font-bold text-emerald-200">Live on cash tables</h2>
           <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-zinc-300">
             <li>Real {TOKEN_SYMBOL} escrow in program-controlled vault token accounts</li>
-            <li>Open-source payout and hand-ranking logic in the Anchor program</li>
-            <li>SlotHashes-derived shuffle + deck commitment per hand</li>
-            <li>Commit–reveal hole cards (masked on Player PDAs during the hand)</li>
+            <li>On-chain VRF shuffle (SlotHashes) with per-hand deck commitment</li>
+            <li>Commit–reveal hole cards — masked on Player PDAs during the hand</li>
+            <li>Open-source payout and hand-ranking logic</li>
             <li>Every seat, action, and cash-out as an on-chain transaction</li>
           </ul>
           <a
@@ -82,26 +94,67 @@ export default function FairnessPage() {
           </ol>
         </section>
 
-        <section className="mt-8 rounded-xl border border-amber-500/20 bg-amber-500/5 p-5">
-          <h2 className="text-sm font-bold text-amber-200">Current limits (honest)</h2>
-          <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-zinc-400">
-            {LIMITS.map((item) => (
-              <li key={item}>{item}</li>
+        <section className="mt-8 rounded-xl border border-white/10 bg-white/[0.02] p-5">
+          <h2 className="text-sm font-bold text-white">Scope</h2>
+          <ul className="mt-3 space-y-3">
+            {SCOPE.map((item) => (
+              <li key={item.label} className="text-sm">
+                <span className="font-semibold text-zinc-200">{item.label}</span>
+                <span className="text-zinc-400"> — {item.body}</span>
+              </li>
             ))}
           </ul>
         </section>
 
-        <section className="mt-8 rounded-xl border border-white/10 bg-white/[0.02] p-5">
-          <h2 className="text-sm font-bold text-white">Roadmap</h2>
-          <p className="mt-2 text-sm text-zinc-400">
-            Switchboard VRF · encrypted hole cards · immutable program · external audit.
+        <section className="mt-6 rounded-xl border border-violet-500/25 bg-violet-500/5 p-5">
+          <h2 className="text-sm font-bold text-violet-200">Security audit</h2>
+          <p className="mt-3 text-sm leading-relaxed text-zinc-300">
+            VRF and commit–reveal dealing are live in the program. We are{" "}
+            <strong className="text-zinc-100">waiting for an independent security audit</strong>{" "}
+            before calling this mainnet casino-grade.
           </p>
+          <p className="mt-3 text-sm leading-relaxed text-zinc-400">
+            Auditors, researchers, and white-hats who want to review our contracts or help
+            with the audit — reach out on X.
+          </p>
+          <a
+            href={TWITTER_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-4 inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:border-violet-400/40 hover:bg-violet-500/10"
+          >
+            @{TWITTER_HANDLE} on X →
+          </a>
+        </section>
+
+        <section className="mt-6 rounded-xl border border-white/10 bg-white/[0.02] p-5">
+          <h2 className="text-sm font-bold text-white">Roadmap</h2>
+          <ul className="mt-3 flex flex-wrap gap-2">
+            {ROADMAP.map((item) => (
+              <li
+                key={item}
+                className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-zinc-400"
+              >
+                {item}
+              </li>
+            ))}
+          </ul>
         </section>
 
         <p className="mt-8 text-xs text-zinc-600">
           Full technical write-up: <code className="text-zinc-500">FAIRNESS.md</code> in the
-          repository. At the table, use the <strong className="text-zinc-400">Verify on-chain</strong>{" "}
-          panel while playing.
+          repository. At the table, use the{" "}
+          <strong className="text-zinc-400">Verify on-chain</strong> panel while playing.
+          Updates and audit news:{" "}
+          <a
+            href={TWITTER_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-violet-400 hover:underline"
+          >
+            @{TWITTER_HANDLE}
+          </a>
+          .
         </p>
 
         <Link href="/" className="mt-6 inline-block text-sm font-semibold text-violet-400 hover:underline">

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import BrandChipMark from "@/components/brand/BrandChipMark";
+import { TWITTER_HANDLE, TWITTER_URL } from "@/lib/constants";
 
 export default function DashboardFooter({
   totalHands,
@@ -24,6 +25,14 @@ export default function DashboardFooter({
       <div className="flex items-center gap-4">
         <a href="#faq" className="transition hover:text-zinc-400">Docs</a>
         <Link href="/fairness" className="transition hover:text-zinc-400">Fairness</Link>
+        <a
+          href={TWITTER_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="transition hover:text-zinc-400"
+        >
+          @{TWITTER_HANDLE}
+        </a>
         <Link href="/terms" className="transition hover:text-zinc-400">Terms</Link>
         <Link href="/privacy" className="transition hover:text-zinc-400">Privacy</Link>
       </div>
