@@ -65,7 +65,11 @@ export default function Home() {
 
   if (roomsLoading || !minLobbyDone) {
     return (
-      <LoadingLobby playersOnline={onlinePlayers} tablesActive={activeTables} />
+      <LoadingLobby
+        playersOnline={onlinePlayers}
+        tablesActive={activeTables}
+        skipRoomFetch
+      />
     );
   }
 

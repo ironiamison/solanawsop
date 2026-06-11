@@ -22,6 +22,8 @@ interface LoadingLobbyProps {
   playersOnline?: number;
   tablesActive?: number;
   assetProgress?: number;
+  /** When parent already loads lobby rooms, skip duplicate fetches */
+  skipRoomFetch?: boolean;
 }
 
 const TIP_SLIDES = [
@@ -73,6 +75,7 @@ export default function LoadingLobby({
   playersOnline: playersOnlineProp,
   tablesActive: tablesActiveProp,
   assetProgress: externalAssetProgress,
+  skipRoomFetch = false,
 }: LoadingLobbyProps) {
   const { authenticated } = usePokerProgram();
   const {
@@ -84,6 +87,7 @@ export default function LoadingLobby({
   } = useLoadingLobbyData({
     playersOnline: playersOnlineProp,
     tablesActive: tablesActiveProp,
+    skipRoomFetch,
   });
 
   const [autoProgress, setAutoProgress] = useState(0);

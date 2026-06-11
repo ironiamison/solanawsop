@@ -106,6 +106,13 @@ export function TwitterLinkProvider({ children }: { children: React.ReactNode })
     (a) => a.type === "twitter_oauth"
   );
 
+  // After X OAuth redirect, Privy may finish linking before onSuccess fires.
+  useEffect(() => {
+    if (ready && authenticated && hasTwitter) {
+      setLinking(false);
+    }
+  }, [ready, authenticated, hasTwitter]);
+
   const connectTwitter = useCallback(() => {
     setError(null);
 

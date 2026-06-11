@@ -75,10 +75,18 @@ export function decodeRoom(pubkey: PublicKey, data: Buffer): RoomState {
   offset += 8;
   const [gameSeed] = readU64(data, offset);
   offset += 8;
-  const vrfSeed = new Uint8Array(data.subarray(offset, offset + 32));
-  offset += 32;
-  const deckCommitment = new Uint8Array(data.subarray(offset, offset + 32));
-  offset += 32;
+
+  // Legacy rooms (pre-VRF) omit vrf_seed + deck_commitment (64 bytes).
+  const hasVrfFields = data.length >= offset + 64 + 32;
+  const vrfSeed = hasVrfFields
+    ? new Uint8Array(data.subarray(offset, offset + 32))
+    : new Uint8Array(32);
+  if (hasVrfFields) offset += 32;
+  const deckCommitment = hasVrfFields
+    ? new Uint8Array(data.subarray(offset, offset + 32))
+    : new Uint8Array(32);
+  if (hasVrfFields) offset += 32;
+
   const seats: PublicKey[] = [];
   for (let i = 0; i < 6; i++) {
     const [pk] = readPubkey(data, offset);
@@ -142,10 +150,16 @@ export function decodePlayer(pubkey: PublicKey, data: Buffer): PlayerState {
     holeCards.push(c);
     offset += 1;
   }
-  offset += 64; // hole_commitments
-  const [holeRevealed] = readBool(data, offset);
-  offset += 1;
-  offset += 32; // entropy_commitment
+
+  const hasCommitFields = data.length >= offset + 64 + 1 + 32 + 1;
+  let holeRevealed = false;
+  if (hasCommitFields) {
+    offset += 64; // hole_commitments
+    [holeRevealed] = readBool(data, offset);
+    offset += 1;
+    offset += 32; // entropy_commitment
+  }
+
   const [statusRaw] = readU8(data, offset);
   offset += 1;
   const [hasActed] = readBool(data, offset);

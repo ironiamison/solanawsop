@@ -23,8 +23,13 @@ function formatTimeAgo(iso: string): string {
 export function useLoadingLobbyData(overrides?: {
   playersOnline?: number;
   tablesActive?: number;
+  /** Parent already fetches rooms — avoid duplicate RPC while splash is up */
+  skipRoomFetch?: boolean;
 }) {
-  const { onlinePlayers, activeTables, loading: roomsLoading } = useLobbyRooms();
+  const lobby = useLobbyRooms();
+  const onlinePlayers = overrides?.skipRoomFetch ? 0 : lobby.onlinePlayers;
+  const activeTables = overrides?.skipRoomFetch ? 0 : lobby.activeTables;
+  const roomsLoading = overrides?.skipRoomFetch ? false : lobby.loading;
   const [activity, setActivity] = useState<LoadingActivityItem[]>([]);
   const [activityLoading, setActivityLoading] = useState(true);
   const [, tick] = useState(0);
