@@ -575,9 +575,82 @@ export class DemoRoomEngine {
       handNumber: this.handNumber,
     };
   }
+
+  toSnapshot(): DemoRoomSnapshot {
+    return {
+      phase: this.phase,
+      pot: this.pot,
+      communityCards: [...this.communityCards],
+      communityCount: this.communityCount,
+      currentBet: this.currentBet,
+      minRaise: this.minRaise,
+      dealerSeat: this.dealerSeat,
+      currentTurnSeat: this.currentTurnSeat,
+      turnStartedAt: this.turnStartedAt,
+      lastRaiserSeat: this.lastRaiserSeat,
+      activeCount: this.activeCount,
+      deck: [...this.deck],
+      deckPos: this.deckPos,
+      handNumber: this.handNumber,
+      statusMessage: this.statusMessage,
+      players: [...this.players.values()],
+      spectators: [...this.spectators.values()],
+      seatToSession: [...this.seatToSession],
+    };
+  }
+
+  restoreFromSnapshot(s: DemoRoomSnapshot): void {
+    this.clearShowdownTimer();
+    this.phase = s.phase;
+    this.pot = s.pot;
+    this.communityCards = [...s.communityCards];
+    this.communityCount = s.communityCount;
+    this.currentBet = s.currentBet;
+    this.minRaise = s.minRaise;
+    this.dealerSeat = s.dealerSeat;
+    this.currentTurnSeat = s.currentTurnSeat;
+    this.turnStartedAt = s.turnStartedAt;
+    this.lastRaiserSeat = s.lastRaiserSeat;
+    this.activeCount = s.activeCount;
+    this.deck = [...s.deck];
+    this.deckPos = s.deckPos;
+    this.handNumber = s.handNumber;
+    this.statusMessage = s.statusMessage;
+    this.players = new Map(s.players.map((p) => [p.sessionId, p]));
+    this.spectators = new Map(s.spectators.map((x) => [x.sessionId, x]));
+    this.seatToSession = [...s.seatToSession];
+    this.stateListeners = new Set();
+  }
+
+  static fromSnapshot(s: DemoRoomSnapshot): DemoRoomEngine {
+    const room = new DemoRoomEngine();
+    room.restoreFromSnapshot(s);
+    return room;
+  }
 }
 
-/** One room shared between custom server.ts and Next.js API routes */
+export interface DemoRoomSnapshot {
+  phase: GamePhase;
+  pot: number;
+  communityCards: number[];
+  communityCount: number;
+  currentBet: number;
+  minRaise: number;
+  dealerSeat: number;
+  currentTurnSeat: number;
+  turnStartedAt: number;
+  lastRaiserSeat: number;
+  activeCount: number;
+  deck: number[];
+  deckPos: number;
+  handNumber: number;
+  statusMessage: string | null;
+  players: DemoPlayer[];
+  spectators: DemoSpectator[];
+  seatToSession: (string | null)[];
+}
+
+/** Local singleton — dev / single-process socket server without Redis */
 const globalStore = globalThis as unknown as { __demoRoom?: DemoRoomEngine };
 
 if (!globalStore.__demoRoom) {

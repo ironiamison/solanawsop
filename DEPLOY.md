@@ -61,6 +61,16 @@ Rebuild after changing public env vars:
 docker compose up -d --build
 ```
 
+### Demo table multiplayer (required on Vercel)
+
+Vercel runs many serverless instances — the demo table needs **shared state**.
+
+1. Vercel project → **Integrations** → add **Upstash Redis** (free tier)
+2. Link it to `solanawsop` — this sets `KV_REST_API_URL` and `KV_REST_API_TOKEN`
+3. Redeploy
+
+Without Redis, two players join different invisible tables and chat does not sync.
+
 ### 5. Production env checklist
 
 | Variable | Production value |

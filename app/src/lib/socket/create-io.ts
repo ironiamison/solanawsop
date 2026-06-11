@@ -1,6 +1,11 @@
 import type { Server as HttpServer } from "http";
 import { Server } from "socket.io";
-import { attachDemoHandlers, lobbyStats, wireDemoBroadcast } from "@/lib/demo/socket";
+import {
+  attachDemoHandlers,
+  handleSocketChatMessage,
+  lobbyStats,
+  wireDemoBroadcast,
+} from "@/lib/demo/socket";
 import { DEMO_ROOM_ID } from "@/lib/demo/constants";
 import { allowedSocketOrigins } from "@/lib/socket/origins";
 
@@ -38,9 +43,7 @@ export function createGameIo(httpServer: HttpServer): Server {
     });
 
     socket.on("chat-message", (msg: ChatMessage) => {
-      if (!msg.roomId || !msg.text?.trim()) return;
-      const payload = { ...msg, ts: Date.now() };
-      io.to(msg.roomId).emit("chat-message", payload);
+      void handleSocketChatMessage(io, msg);
     });
 
     socket.on(

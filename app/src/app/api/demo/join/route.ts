@@ -5,6 +5,6 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   const body = await req.json();
-  const result = handleDemoJoin(body);
+  const result = await handleDemoJoin(body);
   return NextResponse.json(result, { status: result.status });
 }

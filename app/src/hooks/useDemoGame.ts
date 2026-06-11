@@ -48,6 +48,7 @@ function applyViewRole(
 export function useDemoGame() {
   const socketRef = useRef<Socket | null>(null);
   const sessionIdRef = useRef<string | null>(null);
+  const lastChatTsRef = useRef(0);
   const httpModeRef = useRef(!SOCKET_URL);
   const [socketLive, setSocketLive] = useState(false);
   const [serverReady, setServerReady] = useState(false);
@@ -203,15 +204,50 @@ export function useDemoGame() {
     };
   }, [syncSocket, fetchLobby, fetchState]);
 
+  const fetchChat = useCallback(async () => {
+    try {
+      const res = await fetch(
+        demoApiUrl(`/api/demo/chat?since=${lastChatTsRef.current}`)
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      const incoming = (data.messages ?? []) as ChatMessage[];
+      if (!incoming.length) return;
+      setMessages((prev) => {
+        const merged = [...prev];
+        for (const m of incoming) {
+          if (merged.some((x) => x.ts === m.ts && x.wallet === m.wallet)) continue;
+          merged.push(m);
+        }
+        return merged.slice(-100);
+      });
+      lastChatTsRef.current = Math.max(
+        lastChatTsRef.current,
+        ...incoming.map((m) => m.ts)
+      );
+    } catch {
+      // ignore
+    }
+  }, []);
+
   useEffect(() => {
     const sid = sessionId;
     if (!sid) return;
     if (socketLive && !httpModeRef.current) return;
 
     void fetchState(sid);
-    const poll = setInterval(() => void fetchState(sid), 1500);
+    const poll = setInterval(() => void fetchState(sid), 1200);
     return () => clearInterval(poll);
   }, [sessionId, socketLive, fetchState]);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    if (socketLive && !httpModeRef.current) return;
+
+    void fetchChat();
+    const poll = setInterval(() => void fetchChat(), 2000);
+    return () => clearInterval(poll);
+  }, [sessionId, socketLive, fetchChat]);
 
   const applyJoinResult = useCallback(
     (res: JoinResult, valid: string) => {
@@ -342,17 +378,43 @@ export function useDemoGame() {
   );
 
   const sendMessage = useCallback(
-    (text: string, avatar?: string) => {
+    async (text: string, avatar?: string) => {
       const sid = sessionIdRef.current;
       const name = username;
-      if (!sid || !name) return;
-      socketRef.current?.emit("chat-message", {
-        roomId: DEMO_ROOM_ID,
-        wallet: sid,
-        displayName: name,
-        avatar,
-        text,
-      });
+      const trimmed = text.trim();
+      if (!sid || !name || !trimmed) return;
+
+      const socket = socketRef.current;
+      if (socket?.connected && !httpModeRef.current) {
+        socket.emit("chat-message", {
+          roomId: DEMO_ROOM_ID,
+          wallet: sid,
+          displayName: name,
+          avatar,
+          text: trimmed,
+        });
+        return;
+      }
+
+      try {
+        const res = await fetch(demoApiUrl("/api/demo/chat"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: sid,
+            displayName: name,
+            avatar,
+            text: trimmed,
+          }),
+        });
+        const data = await res.json();
+        if (data.message) {
+          setMessages((prev) => [...prev.slice(-99), data.message as ChatMessage]);
+          lastChatTsRef.current = Math.max(lastChatTsRef.current, data.message.ts);
+        }
+      } catch {
+        // ignore
+      }
     },
     [username]
   );

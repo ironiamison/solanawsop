@@ -12,6 +12,8 @@ import {
   handleDemoJoin,
   handleDemoLeaveSeat,
   handleDemoLobby,
+  handleDemoChatList,
+  handleDemoChatSend,
   handleDemoStartHand,
   handleDemoState,
   handleDemoTakeSeat,
@@ -69,14 +71,33 @@ async function handleDemoHttp(
 
   try {
     if (pathname === "/api/demo/lobby" && req.method === "GET") {
-      sendJson(res, 200, handleDemoLobby(), origin);
+      sendJson(res, 200, await handleDemoLobby(), origin);
+      return;
+    }
+
+    if (pathname === "/api/demo/chat" && req.method === "GET") {
+      const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
+      const since = Number(url.searchParams.get("since") ?? "0");
+      sendJson(res, 200, await handleDemoChatList(Number.isFinite(since) ? since : 0), origin);
+      return;
+    }
+
+    if (pathname === "/api/demo/chat" && req.method === "POST") {
+      const body = await readJson<{
+        sessionId?: string;
+        text?: string;
+        displayName?: string;
+        avatar?: string;
+      }>(req);
+      const result = await handleDemoChatSend(body);
+      sendJson(res, result.status, result, origin);
       return;
     }
 
     if (pathname === "/api/demo/state" && req.method === "GET") {
       const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
       const sessionId = url.searchParams.get("sessionId") ?? undefined;
-      const result = handleDemoState(sessionId);
+      const result = await handleDemoState(sessionId);
       if (!result.ok) {
         sendJson(res, result.status, { ok: false, error: result.error }, origin);
         return;
@@ -91,35 +112,35 @@ async function handleDemoHttp(
         preferPlayer?: boolean;
         sessionId?: string;
       }>(req);
-      const result = handleDemoJoin(body);
+      const result = await handleDemoJoin(body);
       sendJson(res, result.status, result, origin);
       return;
     }
 
     if (pathname === "/api/demo/action" && req.method === "POST") {
       const body = await readJson<{ sessionId?: string; action?: DemoAction }>(req);
-      const result = handleDemoAction(body.sessionId ?? "", body.action);
+      const result = await handleDemoAction(body.sessionId ?? "", body.action);
       sendJson(res, result.status, result, origin);
       return;
     }
 
     if (pathname === "/api/demo/leave-seat" && req.method === "POST") {
       const body = await readJson<{ sessionId?: string }>(req);
-      const result = handleDemoLeaveSeat(body.sessionId ?? "");
+      const result = await handleDemoLeaveSeat(body.sessionId ?? "");
       sendJson(res, result.status, result, origin);
       return;
     }
 
     if (pathname === "/api/demo/take-seat" && req.method === "POST") {
       const body = await readJson<{ sessionId?: string }>(req);
-      const result = handleDemoTakeSeat(body.sessionId ?? "");
+      const result = await handleDemoTakeSeat(body.sessionId ?? "");
       sendJson(res, result.status, result, origin);
       return;
     }
 
     if (pathname === "/api/demo/start-hand" && req.method === "POST") {
       const body = await readJson<{ sessionId?: string }>(req);
-      const result = handleDemoStartHand(body.sessionId ?? "");
+      const result = await handleDemoStartHand(body.sessionId ?? "");
       sendJson(res, result.status, result, origin);
       return;
     }

@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   const body = await req.json();
-  const result = handleDemoAction(
+  const result = await handleDemoAction(
     (body.sessionId as string) || "",
     body.action as DemoAction | undefined
   );
