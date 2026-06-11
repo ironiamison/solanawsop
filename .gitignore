@@ -1,0 +1,18 @@
+.anchor
+.DS_Store
+target
+**/*.rs.bk
+node_modules
+test-ledger
+.yarn
+
+# App
+app/.next
+app/out
+app/node_modules
+app/prisma/*.db
+app/prisma/*.db-journal
+app/.env*
+!.env.local.example
+!.env.production.example
+.vercel

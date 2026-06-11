@@ -1,0 +1,19 @@
+services:
+  app:
+    build:
+      context: ./app
+      args:
+        NEXT_PUBLIC_APP_URL: https://solanawsop.com
+        NEXT_PUBLIC_PRIVY_APP_ID: ${NEXT_PUBLIC_PRIVY_APP_ID}
+        NEXT_PUBLIC_SOLANA_NETWORK: ${NEXT_PUBLIC_SOLANA_NETWORK:-devnet}
+        NEXT_PUBLIC_RPC_URL: ${NEXT_PUBLIC_RPC_URL:-https://api.devnet.solana.com}
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./app/.env.production
+    volumes:
+      - app-data:/app/prisma
+    restart: unless-stopped
+
+volumes:
+  app-data:

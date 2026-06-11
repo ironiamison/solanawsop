@@ -1,0 +1,142 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String   @id @default(cuid())
+  privyUserId    String?  @unique
+  twitterId      String?
+  twitterHandle  String?
+  name           String?
+  image          String?
+  bio            String?
+  walletAddress  String?  @unique
+  handsPlayed    Int      @default(0)
+  handsWon       Int      @default(0)
+  rewardPoints   Int      @default(0)
+  playRewardPoints     Int @default(0)
+  referralRewardPoints Int @default(0)
+  referralCode   String?  @unique
+  referredById   String?
+  referralsCount Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  referredBy       User?         @relation("UserReferrals", fields: [referredById], references: [id], onDelete: SetNull)
+  referrals        User[]        @relation("UserReferrals")
+  sentInvites      TableInvite[] @relation("Inviter")
+  friendships      Friendship[]  @relation("UserFriendships")
+  friendOf         Friendship[]  @relation("FriendOf")
+  sentMessages     DirectMessage[] @relation("SentMessages")
+  receivedMessages DirectMessage[] @relation("ReceivedMessages")
+  rewardEvents     RewardEvent[]
+  pointRedemptions PointRedemption[]
+}
+
+model Friendship {
+  id        String   @id @default(cuid())
+  userId    String
+  friendId  String
+  status    String   @default("pending")
+  createdAt DateTime @default(now())
+  user      User     @relation("UserFriendships", fields: [userId], references: [id], onDelete: Cascade)
+  friend    User     @relation("FriendOf", fields: [friendId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, friendId])
+  @@index([friendId])
+  @@index([status])
+}
+
+model DirectMessage {
+  id          String    @id @default(cuid())
+  senderId    String
+  recipientId String
+  body        String
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+  sender      User      @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient   User      @relation("ReceivedMessages", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([senderId, recipientId])
+  @@index([recipientId, readAt])
+}
+
+model TableInvite {
+  id              String   @id @default(cuid())
+  roomPubkey      String
+  inviterId       String
+  inviteeWallet   String?
+  inviteeTwitter  String?
+  createdAt       DateTime @default(now())
+  inviter         User     @relation("Inviter", fields: [inviterId], references: [id], onDelete: Cascade)
+
+  @@index([roomPubkey])
+  @@index([inviteeWallet])
+  @@index([inviteeTwitter])
+}
+
+model PrivateTableMeta {
+  id            String   @id @default(cuid())
+  roomPubkey    String   @unique
+  creatorWallet String
+  tableId       String
+  buyInLamports BigInt
+  name          String?
+  createdAt     DateTime @default(now())
+}
+
+/** Singleton flywheel metrics (burns, OTC, creator rewards) */
+model FlywheelMetric {
+  id                      String   @id @default("global")
+  totalBurnedRaw          BigInt   @default(0)
+  totalOtcPaidRaw         BigInt   @default(0)
+  creatorRewardsRaw       BigInt   @default(0)
+  burnTxSignatures        String   @default("[]")
+  updatedAt               DateTime @updatedAt
+}
+
+model OtcRedemption {
+  id            String   @id @default(cuid())
+  walletAddress String
+  amountRaw     BigInt
+  status        String   @default("pending")
+  note          String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([walletAddress])
+  @@index([status])
+}
+
+model RewardEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  points    Int
+  meta      String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@index([userId, createdAt])
+}
+
+model PointRedemption {
+  id          String   @id @default(cuid())
+  userId      String
+  tierId      String
+  pointsSpent Int
+  perkLabel   String
+  status      String   @default("pending")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+}

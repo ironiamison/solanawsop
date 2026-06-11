@@ -1,0 +1,199 @@
+{
+  "address": "2EjVHs2eD6fHAh7vjKMff6zuGRM8NnbKGrJqtmnLfPc7",
+  "metadata": {
+    "name": "solana_poker",
+    "version": "0.1.0",
+    "spec": "0.1.0"
+  },
+  "instructions": [
+    {
+      "name": "initialize_config",
+      "discriminator": [208,127,21,1,194,190,196,70],
+      "accounts": [
+        { "name": "config", "writable": true },
+        { "name": "authority", "writable": true, "signer": true },
+        { "name": "system_program" }
+      ],
+      "args": []
+    },
+    {
+      "name": "initialize_room",
+      "discriminator": [216,42,137,161,61,72,154,238],
+      "accounts": [
+        { "name": "config", "writable": true },
+        { "name": "room", "writable": true },
+        { "name": "vault" },
+        { "name": "authority", "writable": true, "signer": true },
+        { "name": "system_program" }
+      ],
+      "args": [{ "name": "tier_index", "type": "u8" }]
+    },
+    {
+      "name": "join_room",
+      "discriminator": [95,232,188,81,124,130,78,139],
+      "accounts": [
+        { "name": "room", "writable": true },
+        { "name": "player", "writable": true },
+        { "name": "player_wallet", "writable": true, "signer": true },
+        { "name": "vault", "writable": true },
+        { "name": "system_program" }
+      ],
+      "args": []
+    },
+    {
+      "name": "leave_room",
+      "discriminator": [249,42,239,128,192,20,114,156],
+      "accounts": [
+        { "name": "room", "writable": true },
+        { "name": "player", "writable": true },
+        { "name": "player_wallet", "writable": true, "signer": true },
+        { "name": "vault", "writable": true }
+      ],
+      "args": []
+    },
+    {
+      "name": "start_hand",
+      "discriminator": [50,173,164,52,65,42,197,135],
+      "accounts": [
+        { "name": "room", "writable": true },
+        { "name": "starter", "signer": true }
+      ],
+      "args": []
+    },
+    {
+      "name": "player_action",
+      "discriminator": [37,85,25,135,200,116,96,101],
+      "accounts": [
+        { "name": "room", "writable": true },
+        { "name": "player", "writable": true },
+        { "name": "player_wallet", "signer": true },
+        { "name": "vault", "writable": true },
+        { "name": "config" },
+        { "name": "fee_recipient", "writable": true }
+      ],
+      "args": [{ "name": "action", "type": { "defined": { "name": "PokerMove" } } }]
+    },
+    {
+      "name": "advance_street",
+      "discriminator": [32,130,217,150,106,172,250,30],
+      "accounts": [
+        { "name": "room", "writable": true },
+        { "name": "vault", "writable": true },
+        { "name": "config" },
+        { "name": "fee_recipient", "writable": true }
+      ],
+      "args": []
+    }
+  ],
+  "accounts": [
+    {
+      "name": "GlobalConfig",
+      "discriminator": [149,8,156,202,160,252,176,217]
+    },
+    {
+      "name": "Room",
+      "discriminator": [156,199,67,27,222,23,185,94]
+    },
+    {
+      "name": "Player",
+      "discriminator": [205,222,112,7,165,155,206,218]
+    }
+  ],
+  "types": [
+    {
+      "name": "PokerMove",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          { "name": "Fold" },
+          { "name": "Check" },
+          { "name": "Call" },
+          { "name": "Raise", "fields": [{ "name": "amount", "type": "u64" }] }
+        ]
+      }
+    },
+    {
+      "name": "GamePhase",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          { "name": "Waiting" },
+          { "name": "PreFlop" },
+          { "name": "Flop" },
+          { "name": "Turn" },
+          { "name": "River" },
+          { "name": "Showdown" }
+        ]
+      }
+    },
+    {
+      "name": "PlayerStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          { "name": "Waiting" },
+          { "name": "Active" },
+          { "name": "Folded" },
+          { "name": "AllIn" }
+        ]
+      }
+    },
+    {
+      "name": "GlobalConfig",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          { "name": "authority", "type": "pubkey" },
+          { "name": "rooms_initialized", "type": "u8" },
+          { "name": "bump", "type": "u8" }
+        ]
+      }
+    },
+    {
+      "name": "Room",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          { "name": "buy_in", "type": "u64" },
+          { "name": "tier_index", "type": "u8" },
+          { "name": "player_count", "type": "u8" },
+          { "name": "pot", "type": "u64" },
+          { "name": "phase", "type": { "defined": { "name": "GamePhase" } } },
+          { "name": "community_cards", "type": { "array": ["u8", 5] } },
+          { "name": "community_count", "type": "u8" },
+          { "name": "current_bet", "type": "u64" },
+          { "name": "min_raise", "type": "u64" },
+          { "name": "dealer_seat", "type": "u8" },
+          { "name": "current_turn_seat", "type": "u8" },
+          { "name": "last_raiser_seat", "type": "u8" },
+          { "name": "active_count", "type": "u8" },
+          { "name": "deck", "type": { "array": ["u8", 52] } },
+          { "name": "deck_pos", "type": "u8" },
+          { "name": "hand_number", "type": "u64" },
+          { "name": "game_seed", "type": "u64" },
+          { "name": "seats", "type": { "array": ["pubkey", 6] } },
+          { "name": "bump", "type": "u8" },
+          { "name": "vault_bump", "type": "u8" }
+        ]
+      }
+    },
+    {
+      "name": "Player",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          { "name": "room", "type": "pubkey" },
+          { "name": "wallet", "type": "pubkey" },
+          { "name": "seat", "type": "u8" },
+          { "name": "stack", "type": "u64" },
+          { "name": "round_bet", "type": "u64" },
+          { "name": "total_bet", "type": "u64" },
+          { "name": "hole_cards", "type": { "array": ["u8", 2] } },
+          { "name": "status", "type": { "defined": { "name": "PlayerStatus" } } },
+          { "name": "has_acted", "type": "bool" },
+          { "name": "bump", "type": "u8" }
+        ]
+      }
+    }
+  ]
+}
