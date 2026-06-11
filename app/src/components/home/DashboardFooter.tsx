@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import BrandChipMark from "@/components/brand/BrandChipMark";
-import TokenContractAddress from "@/components/token/TokenContractAddress";
 import { TWITTER_HANDLE, TWITTER_URL } from "@/lib/constants";
 
 export default function DashboardFooter({
@@ -14,8 +13,7 @@ export default function DashboardFooter({
 }) {
   return (
     <footer className="dashboard-footer mt-8 border-t border-white/[0.06] pt-6 text-[11px] text-zinc-600">
-      <TokenContractAddress variant="footer" />
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
       <div className="flex flex-wrap items-center gap-4">
         <BrandChipMark variant="icon" size="sm" className="opacity-40" />
         <span className="flex items-center gap-1.5 text-emerald-500/80">

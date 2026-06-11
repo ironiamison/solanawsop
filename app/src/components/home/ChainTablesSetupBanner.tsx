@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import TokenContractAddress from "@/components/token/TokenContractAddress";
 import { PUMP_FUN_URL, SHOW_DEV_CONTROLS, TOKEN_SYMBOL } from "@/lib/constants";
 import { getSwspMint } from "@/lib/swsop-token";
 
@@ -107,8 +106,6 @@ export default function ChainTablesSetupBanner({
               </>
             )}
           </ol>
-
-          {mintReady && <TokenContractAddress variant="banner" />}
 
           {SHOW_DEV_CONTROLS && !mintReady && (
             <p className="chain-setup-dev-hint">

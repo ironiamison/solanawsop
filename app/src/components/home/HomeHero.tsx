@@ -3,7 +3,6 @@
 import { PublicKey } from "@solana/web3.js";
 import { TOKEN_SYMBOL } from "@/lib/constants";
 import BrandWordLockup from "@/components/brand/BrandWordLockup";
-import TokenContractAddress from "@/components/token/TokenContractAddress";
 import { BtnGhost, BtnPrimary } from "./lobby";
 import HeroAssets from "./HeroAssets";
 
@@ -32,7 +31,6 @@ export default function HomeHero({ playTarget }: { playTarget?: PublicKey }) {
             <BtnGhost href="/demo">Test us out</BtnGhost>
             <BtnGhost href="#cash-games">View tables</BtnGhost>
           </div>
-          <TokenContractAddress variant="hero" />
           <ul className="mt-6 flex flex-wrap gap-x-5 gap-y-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
             <li className="flex items-center gap-1.5">
               <span className="text-emerald-500">✓</span> Provably fair
