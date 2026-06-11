@@ -72,18 +72,14 @@ export default function Home() {
   return (
     <DashboardShell>
       {authenticated && program && publicKey && !tablesDeployed && (
-        <div className="mb-4 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3">
-          <p className="text-sm text-amber-100">
+        <div className="ui-alert ui-alert--amber mb-4">
+          <p className="text-sm">
             On-chain tables are not initialized on devnet yet.
           </p>
-          <p className="mt-1 text-xs text-amber-200/70">
+          <p className="mt-1 text-xs opacity-80">
             Connect your wallet and run one-time setup to create public cash game rooms.
           </p>
-          <button
-            type="button"
-            onClick={handleSetup}
-            className="mt-3 rounded-lg bg-violet-600 px-4 py-2 text-xs font-bold uppercase tracking-wider text-white hover:bg-violet-500"
-          >
+          <button type="button" onClick={handleSetup} className="ui-btn ui-btn--primary ui-btn--sm mt-3">
             Initialize tables
           </button>
         </div>

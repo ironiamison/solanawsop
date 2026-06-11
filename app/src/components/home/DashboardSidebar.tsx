@@ -115,11 +115,7 @@ export default function DashboardSidebar({ balanceRaw = 0 }: { balanceRaw?: numb
             <Link
               key={item.label}
               href={href}
-              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition ${
-                active
-                  ? "bg-violet-600/20 text-violet-100 shadow-[inset_0_0_0_1px_rgba(139,92,246,0.35)]"
-                  : "text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-200"
-              }`}
+              className={`ui-nav-item ${active ? "ui-nav-item--active" : ""}`}
             >
               <NavIcon name={item.icon} />
               <span className="flex-1">{item.label}</span>
@@ -134,8 +130,8 @@ export default function DashboardSidebar({ balanceRaw = 0 }: { balanceRaw?: numb
       </nav>
 
       <div className="border-t border-white/[0.06] p-3">
-        <div className="rounded-xl border border-white/[0.08] bg-[#0c0c10] p-4">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-600">
+        <div className="px-2 py-3">
+          <p className="text-xs font-medium text-zinc-500">
             {TOKEN_SYMBOL} balance
           </p>
           <p className="mt-1.5 text-2xl font-bold tabular-nums tracking-tight">

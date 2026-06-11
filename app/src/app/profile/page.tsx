@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
+import { useLinkTwitter } from "@/hooks/useLinkTwitter";
 import { useRouter, useSearchParams } from "next/navigation";
 import DashboardShell from "@/components/layout/DashboardShell";
 import { GuestGatedContent } from "@/components/profile/GuestGatedPage";
@@ -20,7 +21,8 @@ import { useSocialCounts } from "@/hooks/useSocialCounts";
 import RewardsPanel from "@/components/rewards/RewardsPanel";
 
 function ProfileContent() {
-  const { user, authenticated, ready, linkTwitter } = usePrivy();
+  const { user, authenticated, ready } = usePrivy();
+  const { connectTwitter, linking: linkingTwitter, error: twitterLinkError } = useLinkTwitter();
   const privyProfile = usePrivyProfile();
   const authFetch = useAuthFetch();
   const { counts } = useSocialCounts();
@@ -99,7 +101,12 @@ function ProfileContent() {
   return (
     <GuestGatedContent tab={tab}>
     <div className="profile-page">
-      <ProfileHero profile={heroProfile} onLinkTwitter={linkTwitter} />
+      <ProfileHero
+        profile={heroProfile}
+        onLinkTwitter={connectTwitter}
+        linkingTwitter={linkingTwitter}
+        twitterLinkError={twitterLinkError}
+      />
 
       <ProfileTabs active={tab} onChange={setTabAndUrl} />
 
@@ -189,7 +196,9 @@ function ProfileContent() {
           referralsCount={dbProfile?.referralsCount ?? 0}
           handsPlayed={dbProfile?.handsPlayed ?? 0}
           twitterHandle={twitterHandle}
-          onLinkTwitter={linkTwitter}
+          onLinkTwitter={connectTwitter}
+          linkingTwitter={linkingTwitter}
+          twitterLinkError={twitterLinkError}
           onPointsChange={(pts) => setDbProfile((p) => (p ? { ...p, rewardPoints: pts } : p))}
         />
       )}

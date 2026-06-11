@@ -16,6 +16,8 @@ export default function RewardsPanel({
   handsPlayed = 0,
   twitterHandle,
   onLinkTwitter,
+  linkingTwitter = false,
+  twitterLinkError,
   onPointsChange,
 }: {
   rewardPoints?: number;
@@ -25,6 +27,8 @@ export default function RewardsPanel({
   handsPlayed?: number;
   twitterHandle?: string | null;
   onLinkTwitter?: () => void;
+  linkingTwitter?: boolean;
+  twitterLinkError?: string | null;
   onPointsChange?: (points: number) => void;
 }) {
   const profilePoints =
@@ -74,10 +78,13 @@ export default function RewardsPanel({
                 Shows your handle on leaderboards and lets friends find you by @username.
               </p>
             </div>
-            <BtnSecondary onClick={onLinkTwitter} className="shrink-0">
-              Verify X
+            <BtnSecondary onClick={onLinkTwitter} className="shrink-0" disabled={linkingTwitter}>
+              {linkingTwitter ? "Opening X…" : "Verify X"}
             </BtnSecondary>
           </div>
+          {twitterLinkError && (
+            <p className="mt-3 text-xs text-red-400">{twitterLinkError}</p>
+          )}
         </LobbyCard>
       )}
 

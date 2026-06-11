@@ -10,7 +10,7 @@ export default function HomeHero({ playTarget }: { playTarget?: PublicKey }) {
   const playHref = playTarget ? `/table/${playTarget.toBase58()}` : "/#cash-games";
 
   return (
-    <section className="lobby-hero premium-hero relative overflow-hidden rounded-2xl border border-white/[0.08]">
+    <section className="lobby-hero premium-hero relative overflow-hidden rounded-xl">
       <div className="relative z-10 grid lg:grid-cols-[1fr_300px]">
         <div className="p-6 sm:p-8 lg:py-9">
           <BrandWordLockup size="md" showTagline className="mb-4" />

@@ -1,10 +1,12 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 
-const STORAGE_KEY = "solanawsop_getting_started_dismissed";
+export const GETTING_STARTED_STORAGE_KEY = "solanawsop_getting_started_dismissed";
+const STORAGE_KEY = GETTING_STARTED_STORAGE_KEY;
 const DEMO_KEY = "solanawsop_demo_visited";
 
 type StepId = "demo" | "wallet" | "rewards" | "friends";
@@ -37,7 +39,7 @@ const STEPS: {
     n: 2,
     title: "Connect",
     copy: "Link your wallet with Privy for on-chain cash games.",
-    cta: "Connect wallet",
+    cta: "Use Connect above",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v3" />
@@ -75,11 +77,9 @@ const STEPS: {
 function StepTile({
   step,
   done,
-  onLogin,
 }: {
   step: (typeof STEPS)[number];
   done: boolean;
-  onLogin: () => void;
 }) {
   const body = (
     <>
@@ -106,14 +106,6 @@ function StepTile({
 
   const className = `gs-step ${done ? "gs-step--done" : ""}`;
 
-  if (step.id === "wallet" && !done) {
-    return (
-      <button type="button" onClick={onLogin} className={className}>
-        {body}
-      </button>
-    );
-  }
-
   if (step.href && !done) {
     return (
       <Link href={step.href} className={className}>
@@ -126,18 +118,34 @@ function StepTile({
 }
 
 export default function GettingStartedCard() {
-  const { authenticated, ready, login } = usePrivy();
+  const { authenticated, ready } = usePrivy();
   const [dismissed, setDismissed] = useState(true);
   const [demoDone, setDemoDone] = useState(false);
 
   useEffect(() => {
     try {
-      setDismissed(localStorage.getItem(STORAGE_KEY) === "1");
+      const wasDismissed = localStorage.getItem(STORAGE_KEY) === "1";
+      const openFromHash = window.location.hash === "#getting-started";
+      if (openFromHash) {
+        localStorage.removeItem(STORAGE_KEY);
+        setDismissed(false);
+      } else {
+        setDismissed(wasDismissed);
+      }
       setDemoDone(localStorage.getItem(DEMO_KEY) === "1");
     } catch {
       setDismissed(false);
     }
   }, []);
+
+  const restore = () => {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // ignore
+    }
+    setDismissed(false);
+  };
 
   const doneMap = useMemo(
     (): Record<StepId, boolean> => ({
@@ -152,7 +160,19 @@ export default function GettingStartedCard() {
   const completed = STEPS.filter((s) => doneMap[s.id]).length;
   const progress = Math.round((completed / STEPS.length) * 100);
 
-  if (!ready || dismissed) return null;
+  if (!ready) return null;
+
+  if (dismissed) {
+    return (
+      <section id="getting-started" className="gs-collapsed mb-5 scroll-mt-24">
+        <p className="gs-collapsed-eyebrow">New here?</p>
+        <h2 className="gs-collapsed-heading font-display">Deal yourself in</h2>
+        <button type="button" onClick={restore} className="gs-collapsed-btn">
+          Show 4-step guide
+        </button>
+      </section>
+    );
+  }
 
   const dismiss = () => {
     try {
@@ -164,8 +184,17 @@ export default function GettingStartedCard() {
   };
 
   return (
-    <section className="gs-panel mb-5">
-      <div className="gs-panel-glow" aria-hidden />
+    <section id="getting-started" className="gs-panel mb-5 scroll-mt-24">
+      <Image
+        src="/assets/lobby/getting-started-bg.png"
+        alt=""
+        fill
+        priority
+        unoptimized
+        className="gs-panel-bg"
+        sizes="(max-width: 1320px) 100vw, 1320px"
+      />
+      <div className="gs-panel-vignette" aria-hidden />
       <div className="gs-panel-inner">
         <header className="gs-header">
           <div className="gs-header-copy">
@@ -202,7 +231,6 @@ export default function GettingStartedCard() {
               key={step.id}
               step={step}
               done={doneMap[step.id]}
-              onLogin={login}
             />
           ))}
         </div>

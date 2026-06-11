@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { TOKEN_SYMBOL } from "@/lib/constants";
+import GuestInfoBox from "@/components/ui/GuestInfoBox";
 import { LobbyCard, SectionTitle } from "./lobby";
 
 const MISSIONS = [
@@ -70,7 +71,7 @@ export default function MissionsCard() {
         Daily missions
       </SectionTitle>
       {!authenticated ? (
-        <p className="text-sm text-zinc-600">Connect wallet to track mission progress.</p>
+        <GuestInfoBox>Connect in the top bar to track mission progress.</GuestInfoBox>
       ) : (
         <ul className="space-y-4">
           {MISSIONS.map((mission) => {

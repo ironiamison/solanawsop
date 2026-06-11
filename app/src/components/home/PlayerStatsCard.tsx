@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { TOKEN_SYMBOL } from "@/lib/constants";
+import GuestInfoBox from "@/components/ui/GuestInfoBox";
 import { LobbyCard, SectionTitle } from "./lobby";
 
 export default function PlayerStatsCard() {
@@ -39,7 +40,7 @@ export default function PlayerStatsCard() {
     <LobbyCard className="p-5" hover={false}>
       <SectionTitle>Your stats</SectionTitle>
       {!authenticated ? (
-        <p className="text-sm text-zinc-600">Connect wallet to track your session stats.</p>
+        <GuestInfoBox>Connect in the top bar to track session stats.</GuestInfoBox>
       ) : (
         <>
           <div className="flex gap-5">
@@ -83,10 +84,7 @@ export default function PlayerStatsCard() {
               </div>
             </dl>
           </div>
-          <Link
-            href="/profile"
-            className="mt-4 block w-full rounded-xl border border-white/10 py-2.5 text-center text-[11px] font-semibold uppercase tracking-wide text-zinc-400 transition hover:border-white/20 hover:bg-white/[0.03]"
-          >
+          <Link href="/profile" className="ui-btn ui-btn--ghost ui-btn--block mt-4">
             View profile
           </Link>
         </>

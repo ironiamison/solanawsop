@@ -37,11 +37,11 @@ export default function DailyJackpotCard({ playHref }: { playHref: string }) {
   const [h, m, s] = hms ?? ["--", "--", "--"];
 
   return (
-    <section className="lobby-jackpot premium-jackpot relative flex min-h-[196px] flex-col justify-between overflow-hidden rounded-2xl border border-violet-500/20 p-5">
+    <section className="lobby-jackpot premium-jackpot ui-card ui-card--raised relative flex min-h-[196px] flex-col justify-between overflow-hidden p-5">
       <div className="lobby-jackpot-glow pointer-events-none absolute inset-0" aria-hidden />
       <JackpotChipStack />
       <div className="relative z-10 max-w-[65%]">
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-violet-400">
+        <p className="text-xs font-medium text-violet-400">
           Daily jackpot
         </p>
         <p className="mt-2 text-[2rem] font-black leading-none tabular-nums tracking-tight">

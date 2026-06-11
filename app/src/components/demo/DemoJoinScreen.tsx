@@ -98,10 +98,8 @@ export default function DemoJoinScreen({
                   Username
                 </label>
                 <div
-                  className={`demo-join-input mt-1.5 flex items-center gap-2.5 rounded-xl border px-3.5 py-3 ${
-                    isValid
-                      ? "border-emerald-500/45 bg-emerald-500/[0.06]"
-                      : "border-white/10 bg-black/35"
+                  className={`demo-join-input ui-surface-inset mt-1.5 flex items-center gap-2.5 px-3.5 py-3 ${
+                    isValid ? "ring-1 ring-violet-500/40" : ""
                   }`}
                 >
                   <UserIcon className="h-4 w-4 shrink-0 text-emerald-400/90" />
@@ -129,7 +127,7 @@ export default function DemoJoinScreen({
                 </p>
               </div>
 
-              <div className="demo-join-status flex items-center gap-2.5 rounded-xl border border-white/[0.07] bg-white/[0.03] px-3.5 py-2.5">
+              <div className="demo-join-status ui-surface-inset flex items-center gap-2.5 px-3.5 py-2.5">
                 <UsersIcon
                   className={`h-4 w-4 shrink-0 ${joining || !connected ? "animate-pulse text-emerald-400" : "text-zinc-500"}`}
                 />
@@ -146,7 +144,7 @@ export default function DemoJoinScreen({
               </div>
 
               {error && (
-                <p className="rounded-xl border border-red-500/25 bg-red-500/10 px-3.5 py-2.5 text-[12px] text-red-300">
+                <p className="ui-alert ui-alert--error">
                   {error}
                 </p>
               )}

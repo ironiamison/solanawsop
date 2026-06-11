@@ -22,7 +22,7 @@ export default function CollapsibleSection({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-4 rounded-xl border border-white/[0.06] bg-white/[0.02] px-5 py-4 text-left transition hover:bg-white/[0.04]"
+        className="ui-card flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition hover:bg-white/[0.03]"
       >
         <div>
           <h2 className="text-sm font-semibold text-zinc-300">{title}</h2>

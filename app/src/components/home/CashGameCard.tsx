@@ -38,9 +38,9 @@ export default function CashGameCard({
   return (
     <Link
       href={`/table/${pubkey.toBase58()}`}
-      className="lobby-table-card group flex flex-col rounded-2xl border border-white/[0.08] bg-[#0c0c10] p-4 transition duration-200"
+      className="lobby-table-card ui-card ui-card--hover group flex flex-col p-4"
     >
-      <div className="relative overflow-hidden rounded-xl bg-[radial-gradient(ellipse_at_center,rgba(124,58,237,0.08),transparent_70%)] py-2">
+      <div className="relative overflow-hidden rounded-lg py-2">
         <TablePreview playerCount={playerCount} />
       </div>
       <div className="mt-4 flex-1 text-center">
@@ -59,7 +59,7 @@ export default function CashGameCard({
           Buy-in {buyIn} {TOKEN_SYMBOL}
         </p>
       </div>
-      <BtnBlockLabel className="mt-4 transition group-hover:brightness-110">Join table</BtnBlockLabel>
+      <BtnBlockLabel className="mt-4">Join table</BtnBlockLabel>
     </Link>
   );
 }

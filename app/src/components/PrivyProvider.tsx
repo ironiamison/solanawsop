@@ -37,11 +37,15 @@ export default function AppPrivyProvider({
       config={{
         appearance: {
           theme: "dark",
-          accentColor: "#f59e0b",
+          accentColor: "#8b5cf6",
           walletChainType: "solana-only",
           showWalletLoginFirst: true,
         },
         loginMethods: ["wallet", "twitter", "email", "google"],
+        legal: {
+          termsAndConditionsUrl: "/terms",
+          privacyPolicyUrl: "/privacy",
+        },
         embeddedWallets: {
           solana: {
             createOnLogin: "users-without-wallets",

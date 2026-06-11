@@ -28,10 +28,13 @@ export default function LeaderboardPanel({
   limit = 10,
   compact = false,
   showViewAll = false,
+  page = false,
 }: {
   limit?: number;
   compact?: boolean;
   showViewAll?: boolean;
+  /** Full /leaderboard page — taller list, page card styling */
+  page?: boolean;
 }) {
   const [players, setPlayers] = useState<LeaderboardPlayer[]>([]);
   const [sort, setSort] = useState<"wins" | "points">("wins");
@@ -47,20 +50,20 @@ export default function LeaderboardPanel({
   }, [sort, limit]);
 
   return (
-    <LobbyCard id={compact ? "leaderboard" : undefined} className="p-5" hover={false}>
+    <LobbyCard
+      id={compact ? "leaderboard" : undefined}
+      className={`p-5${page ? " lb-page-panel" : ""}`}
+      hover={false}
+    >
       <SectionTitle
         action={
-          <div className="flex rounded-lg bg-black/40 p-0.5">
+          <div className="ui-segmented">
             {SORTS.map((s) => (
               <button
                 key={s.id}
                 type="button"
                 onClick={() => setSort(s.id)}
-                className={`rounded-md px-2.5 py-0.5 text-[9px] font-bold uppercase transition ${
-                  sort === s.id
-                    ? "bg-violet-600 text-white shadow-sm"
-                    : "text-zinc-600 hover:text-zinc-400"
-                }`}
+                className={`ui-segment${sort === s.id ? " ui-segment--active" : ""}`}
               >
                 {s.label}
               </button>

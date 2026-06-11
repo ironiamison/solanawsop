@@ -109,7 +109,7 @@ export default function FriendsPanel({ compact = false }: { compact?: boolean })
             </BtnSecondary>
           </div>
           {suggestions.length > 0 && (
-            <ul className="absolute z-20 mt-1 w-full overflow-hidden rounded-xl border border-white/10 bg-[#0c0c10] shadow-xl">
+            <ul className="ui-dropdown absolute z-20 mt-1 w-full">
               {suggestions.map((u) => (
                 <li key={u.id}>
                   <button
@@ -146,10 +146,7 @@ export default function FriendsPanel({ compact = false }: { compact?: boolean })
           </h3>
           <ul className="space-y-2">
             {incoming.map((row) => (
-              <li
-                key={row.friendshipId}
-                className="flex items-center gap-3 rounded-xl border border-amber-500/15 bg-amber-500/[0.04] px-3 py-3"
-              >
+              <li key={row.friendshipId} className="ui-row ui-row--highlight px-1">
                 <UserAvatar image={row.user.image} name={row.user.name} size="sm" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-zinc-200">
@@ -192,17 +189,14 @@ export default function FriendsPanel({ compact = false }: { compact?: boolean })
         {loading ? (
           <p className="text-sm text-zinc-600">Loading…</p>
         ) : displayFriends.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-white/10 px-4 py-8 text-center text-sm text-zinc-600">
+          <p className="ui-empty">
             No friends yet — search by @handle or paste a wallet address.
           </p>
         ) : (
           <ul className="space-y-1.5">
             {displayFriends.map((row) => (
               <li key={row.friendshipId}>
-                <Link
-                  href={`/messages?peer=${row.user.id}`}
-                  className="flex items-center gap-3 rounded-xl border border-white/[0.06] bg-[#08080c] px-3 py-2.5 transition hover:border-violet-500/25 hover:bg-violet-500/[0.04]"
-                >
+                <Link href={`/messages?peer=${row.user.id}`} className="ui-row px-1">
                   <UserAvatar image={row.user.image} name={row.user.name} size="sm" online />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-zinc-200">
@@ -231,10 +225,7 @@ export default function FriendsPanel({ compact = false }: { compact?: boolean })
           </h3>
           <ul className="space-y-1.5">
             {outgoing.map((row) => (
-              <li
-                key={row.friendshipId}
-                className="flex items-center gap-3 rounded-xl border border-white/[0.05] px-3 py-2.5 opacity-70"
-              >
+              <li key={row.friendshipId} className="ui-row px-1 opacity-70">
                 <UserAvatar image={row.user.image} name={row.user.name} size="sm" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm text-zinc-400">

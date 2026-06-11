@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePrivy } from "@privy-io/react-auth";
 import LobbyAssetImage from "@/components/home/LobbyAssetImage";
+import GuestInfoBox from "@/components/ui/GuestInfoBox";
 import { useAuthFetch } from "@/hooks/useAuthFetch";
 import { REWARD_POINTS } from "@/lib/rewards";
 
@@ -17,7 +18,7 @@ type ReferralData = {
 type Variant = "loading" | "profile";
 
 export default function ReferralInviteCard({ variant = "loading" }: { variant?: Variant }) {
-  const { authenticated, ready, login } = usePrivy();
+  const { authenticated, ready } = usePrivy();
   const authFetch = useAuthFetch();
   const [data, setData] = useState<ReferralData | null>(null);
   const [copied, setCopied] = useState(false);
@@ -81,9 +82,7 @@ export default function ReferralInviteCard({ variant = "loading" }: { variant?: 
         )}
 
         {!ready ? null : !authenticated ? (
-          <button type="button" onClick={login} className="premium-refer-btn">
-            Connect to invite
-          </button>
+          <GuestInfoBox>Connect in the top bar to copy your invite link.</GuestInfoBox>
         ) : (
           <div className="premium-refer-actions">
             <button

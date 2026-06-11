@@ -11,7 +11,7 @@ export default function DashboardFooter({
   totalPlayers: number;
 }) {
   return (
-    <footer className="mt-8 flex flex-wrap items-center justify-between gap-4 border-t border-white/[0.06] pt-6 text-[11px] text-zinc-600">
+    <footer className="dashboard-footer mt-8 flex flex-wrap items-center justify-between gap-4 border-t border-white/[0.06] pt-6 text-[11px] text-zinc-600">
       <div className="flex flex-wrap items-center gap-4">
         <BrandChipMark variant="icon" size="sm" className="opacity-40" />
         <span className="flex items-center gap-1.5 text-emerald-500/80">

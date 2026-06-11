@@ -43,7 +43,7 @@ export default function TournamentsPanel() {
         Tournaments
       </SectionTitle>
 
-      <div className="group mb-3 overflow-hidden rounded-xl border border-white/[0.08] bg-gradient-to-br from-[#0c0a10] to-[#08080c] p-4">
+      <div className="ui-surface-inset group mb-3 overflow-hidden p-4">
         <div className="flex items-start gap-3">
           <FeaturedTrophy />
           <div className="min-w-0 flex-1 pt-0.5">
@@ -61,23 +61,22 @@ export default function TournamentsPanel() {
             </p>
           </div>
         </div>
-        <BtnBlockLabel className="mt-4 opacity-60">Coming soon</BtnBlockLabel>
+        <BtnBlockLabel className="mt-4" muted>
+          Coming soon
+        </BtnBlockLabel>
       </div>
 
-      <ul className="space-y-2">
+      <ul>
         {UPCOMING_TOURNAMENTS.slice(0, 2).map((t) => (
           <li key={t.id}>
-            <Link
-              href="/tournaments"
-              className="flex items-center justify-between rounded-xl border border-white/[0.05] bg-[#08080c] px-3 py-3 transition hover:border-white/[0.08]"
-            >
+            <Link href="/tournaments" className="ui-list-row">
               <div className="min-w-0">
-                <p className="truncate text-xs font-semibold text-zinc-300">{t.title}</p>
-                <p className="text-[10px] text-zinc-600">
+                <p className="truncate text-sm font-medium text-zinc-300">{t.title}</p>
+                <p className="text-xs text-zinc-600">
                   {t.buyInLabel} · {t.prizePool}
                 </p>
               </div>
-              <span className="shrink-0 text-[10px] font-medium tabular-nums text-violet-400">
+              <span className="shrink-0 text-xs font-medium tabular-nums text-violet-400">
                 {t.startsIn}
               </span>
             </Link>

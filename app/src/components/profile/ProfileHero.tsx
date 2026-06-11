@@ -20,9 +20,13 @@ export type ProfileHeroData = {
 export default function ProfileHero({
   profile,
   onLinkTwitter,
+  linkingTwitter = false,
+  twitterLinkError,
 }: {
   profile: ProfileHeroData;
   onLinkTwitter?: () => void;
+  linkingTwitter?: boolean;
+  twitterLinkError?: string | null;
 }) {
   const winRate =
     profile.handsPlayed && profile.handsPlayed > 0
@@ -60,9 +64,16 @@ export default function ProfileHero({
 
         <div className="profile-hero-actions">
           {!profile.twitterHandle && onLinkTwitter && (
-            <BtnSecondary onClick={onLinkTwitter} className="profile-verify-btn">
-              Verify X · +{REWARD_POINTS.TWITTER_VERIFY} pts
+            <BtnSecondary
+              onClick={onLinkTwitter}
+              className="profile-verify-btn"
+              disabled={linkingTwitter}
+            >
+              {linkingTwitter ? "Opening X…" : `Verify X · +${REWARD_POINTS.TWITTER_VERIFY} pts`}
             </BtnSecondary>
+          )}
+          {twitterLinkError && (
+            <p className="profile-hero-link-error">{twitterLinkError}</p>
           )}
           {profile.twitterHandle && (
             <span className="profile-verified-badge">✓ Verified on X</span>

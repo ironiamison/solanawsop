@@ -11,6 +11,7 @@ import {
   solToLamports,
   TOKEN_SYMBOL,
 } from "@/lib/constants";
+import GuestInfoBox from "@/components/ui/GuestInfoBox";
 import { tableInviteUrl } from "@/lib/table-invites";
 import { createPrivateTable, invitePlayer } from "@/lib/program";
 import { privateRoomPda } from "@/lib/pdas";
@@ -228,10 +229,10 @@ function PrivateTablesLive() {
   if (!publicKey) {
     return (
       <div className="profile-empty-card">
-        <p className="profile-empty-title">Connect wallet</p>
-        <p className="profile-empty-copy">
-          Link a Solana wallet to create private SOL tables and share direct invite links.
-        </p>
+        <p className="profile-empty-title">Wallet required</p>
+        <GuestInfoBox className="mt-3">
+          Connect in the top bar to create private SOL tables and share invite links.
+        </GuestInfoBox>
       </div>
     );
   }

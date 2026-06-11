@@ -3,40 +3,71 @@
 import { usePrivy } from "@privy-io/react-auth";
 import { useWallets } from "@privy-io/react-auth/solana";
 
+function WalletIcon({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M4 7.5A2.5 2.5 0 0 1 6.5 5h11A2.5 2.5 0 0 1 20 7.5v1.25H6.75A2.75 2.75 0 0 0 4 11.5v5A2.5 2.5 0 0 0 6.5 19h11a2.5 2.5 0 0 0 2.5-2.5v-7A2.5 2.5 0 0 0 17.5 7H6.5"
+        stroke="currentColor"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M16.5 13.25h.01"
+        stroke="currentColor"
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 export default function LoginButton({
   variant = "default",
 }: {
-  variant?: "default" | "dashboard";
+  variant?: "default" | "dashboard" | "hero";
 }) {
   const { ready, authenticated, login, logout, user } = usePrivy();
   const { wallets } = useWallets();
 
+  const sizeClass =
+    variant === "hero"
+      ? "wallet-connect-btn--hero"
+      : variant === "dashboard"
+        ? "wallet-connect-btn--compact"
+        : "wallet-connect-btn--md";
+
+  const label =
+    variant === "hero" ? "Connect wallet" : variant === "dashboard" ? "Connect" : "Connect wallet";
+
   if (!ready) {
     return (
-      <button disabled className="btn-ghost opacity-50">
-        …
-      </button>
+      <span
+        className={`wallet-connect-btn wallet-connect-btn--loading ${sizeClass}`}
+        aria-hidden
+      />
     );
   }
 
   if (!authenticated) {
     return (
       <button
+        type="button"
         onClick={login}
-        className={
-          variant === "dashboard"
-            ? "rounded-xl bg-gradient-to-b from-[#fde047] to-[#eab308] px-5 py-2.5 text-xs font-bold text-zinc-900 shadow-[0_4px_14px_rgba(234,179,8,0.35)] transition hover:brightness-105"
-            : "btn-gold !px-4 !py-2 text-[13px]"
-        }
+        className={`wallet-connect-btn ${sizeClass}`}
       >
-        Connect
+        <span className="wallet-connect-btn-icon">
+          <WalletIcon />
+        </span>
+        <span>{label}</span>
       </button>
     );
   }
 
   const wallet = wallets[0]?.address;
   const twitter = user?.linkedAccounts?.find((a) => a.type === "twitter_oauth");
-  const label =
+  const connectedLabel =
     twitter && "username" in twitter
       ? `@${twitter.username}`
       : wallet
@@ -48,15 +79,11 @@ export default function LoginButton({
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <span className="hidden max-w-[100px] truncate text-xs text-zinc-500 sm:inline">
-        {label}
-      </span>
-      <button
-        onClick={logout}
-        className="rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-400 transition hover:border-white/20 hover:text-zinc-200"
-      >
-        Out
+    <div className="wallet-connected">
+      <span className="wallet-connected-dot" aria-hidden />
+      <span className="wallet-connected-label">{connectedLabel}</span>
+      <button type="button" onClick={logout} className="wallet-disconnect-btn">
+        Disconnect
       </button>
     </div>
   );
