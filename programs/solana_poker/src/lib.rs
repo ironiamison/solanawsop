@@ -1,5 +1,8 @@
 use anchor_lang::prelude::*;
+use anchor_lang::solana_program::sysvar::slot_hashes::SlotHashes;
 use anchor_lang::system_program;
+use anchor_spl::associated_token::AssociatedToken;
+use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 
 mod account_helpers;
 mod errors;
@@ -7,13 +10,28 @@ mod game_logic;
 mod hand_eval;
 mod state;
 
-use account_helpers::{load_room, read_player, save_room, with_player_mut};
+use account_helpers::{load_hand_state, load_room, read_player, save_room, with_player_mut};
 
 use errors::PokerError;
 use game_logic::*;
 use state::*;
 
 declare_id!("2EjVHs2eD6fHAh7vjKMff6zuGRM8NnbKGrJqtmnLfPc7");
+
+#[event]
+pub struct HoleCardsDealt {
+    pub wallet: Pubkey,
+    pub card_0: u8,
+    pub card_1: u8,
+}
+
+#[event]
+pub struct HandDealt {
+    pub room: Pubkey,
+    pub hand_number: u64,
+    pub deck_commitment: [u8; 32],
+    pub vrf_seed: [u8; 32],
+}
 
 #[program]
 pub mod solana_poker {
@@ -22,13 +40,36 @@ pub mod solana_poker {
     pub fn initialize_config(ctx: Context<InitializeConfig>) -> Result<()> {
         let config = &mut ctx.accounts.config;
         config.authority = ctx.accounts.authority.key();
+        config.swsop_mint = Pubkey::default();
         config.rooms_initialized = 0;
         config.bump = ctx.bumps.config;
         Ok(())
     }
 
+    /// Set the $SWSOP SPL mint after pump.fun deploy (authority only, one-time).
+    pub fn configure_mint(ctx: Context<ConfigureMint>, mint: Pubkey) -> Result<()> {
+        require!(
+            ctx.accounts.authority.key() == ctx.accounts.config.authority,
+            PokerError::InvalidBet
+        );
+        require!(
+            !ctx.accounts.config.mint_configured(),
+            PokerError::InvalidBet
+        );
+        ctx.accounts.config.swsop_mint = mint;
+        Ok(())
+    }
+
     pub fn initialize_room(ctx: Context<InitializeRoom>, tier_index: u8) -> Result<()> {
         require!(tier_index < BUY_IN_TIERS.len() as u8, PokerError::InvalidBet);
+        require!(
+            ctx.accounts.config.mint_configured(),
+            PokerError::MintNotConfigured
+        );
+        require!(
+            ctx.accounts.mint.key() == ctx.accounts.config.swsop_mint,
+            PokerError::InvalidMint
+        );
 
         let buy_in = BUY_IN_TIERS[tier_index as usize];
         let room = &mut ctx.accounts.room;
@@ -48,7 +89,15 @@ pub mod solana_poker {
         buy_in: u64,
         table_id: u64,
     ) -> Result<()> {
-        require!(buy_in >= 10_000_000, PokerError::BuyInTooLow);
+        require!(buy_in >= MIN_PRIVATE_BUY_IN, PokerError::BuyInTooLow);
+        require!(
+            ctx.accounts.config.mint_configured(),
+            PokerError::MintNotConfigured
+        );
+        require!(
+            ctx.accounts.mint.key() == ctx.accounts.config.swsop_mint,
+            PokerError::InvalidMint
+        );
 
         let room = &mut ctx.accounts.room;
         room.init_defaults(buy_in, 255, ctx.bumps.room, ctx.bumps.vault);
@@ -94,12 +143,22 @@ pub mod solana_poker {
         );
 
         let buy_in = room.buy_in;
-        system_program::transfer(
+        require!(
+            ctx.accounts.config.mint_configured(),
+            PokerError::MintNotConfigured
+        );
+        require!(
+            ctx.accounts.mint.key() == ctx.accounts.config.swsop_mint,
+            PokerError::InvalidMint
+        );
+
+        token::transfer(
             CpiContext::new(
-                ctx.accounts.system_program.to_account_info(),
-                system_program::Transfer {
-                    from: ctx.accounts.player_wallet.to_account_info(),
-                    to: ctx.accounts.vault.to_account_info(),
+                ctx.accounts.token_program.to_account_info(),
+                Transfer {
+                    from: ctx.accounts.player_token_account.to_account_info(),
+                    to: ctx.accounts.vault_token_account.to_account_info(),
+                    authority: ctx.accounts.player_wallet.to_account_info(),
                 },
             ),
             buy_in,
@@ -117,10 +176,26 @@ pub mod solana_poker {
         player.round_bet = 0;
         player.total_bet = 0;
         player.hole_cards = [255; HOLE_CARDS];
+        player.hole_commitments = [[0u8; 32]; HOLE_CARDS];
+        player.hole_revealed = false;
+        player.entropy_commitment = [0u8; 32];
         player.status = PlayerStatus::Waiting;
         player.has_acted = false;
         player.bump = ctx.bumps.player;
 
+        Ok(())
+    }
+
+    /// Optional pre-hand entropy commit (hash only). Cleared when the hand ends.
+    pub fn commit_hand_entropy(
+        ctx: Context<CommitHandEntropy>,
+        commitment: [u8; 32],
+    ) -> Result<()> {
+        require!(
+            ctx.accounts.room.phase == GamePhase::Waiting,
+            PokerError::RoomNotWaiting
+        );
+        ctx.accounts.player.entropy_commitment = commitment;
         Ok(())
     }
 
@@ -136,12 +211,16 @@ pub mod solana_poker {
         let seat = player.seat as usize;
         require!(room.seats[seat] == player.wallet, PokerError::NotInRoom);
 
-        **ctx.accounts.vault.to_account_info().try_borrow_mut_lamports()? -= stack;
-        **ctx
-            .accounts
-            .player_wallet
-            .to_account_info()
-            .try_borrow_mut_lamports()? += stack;
+        let room_key = room.key();
+        transfer_tokens_from_vault(
+            room_key,
+            room.vault_bump,
+            ctx.accounts.vault_token_account.to_account_info(),
+            ctx.accounts.player_token_account.to_account_info(),
+            ctx.accounts.vault.to_account_info(),
+            ctx.accounts.token_program.to_account_info(),
+            stack,
+        )?;
 
         room.seats[seat] = Pubkey::default();
         room.player_count = room.player_count.saturating_sub(1);
@@ -150,7 +229,7 @@ pub mod solana_poker {
     }
 
     /// Start a new hand. Pass all seated player accounts as remaining_accounts.
-    pub fn start_hand(ctx: Context<StartHand>) -> Result<()> {
+    pub fn start_hand(ctx: Context<StartHand>, next_hand: u64) -> Result<()> {
         let remaining: Vec<AccountInfo> = ctx.remaining_accounts.iter().cloned().collect();
         let room_info = ctx.accounts.room.to_account_info();
         let mut room = load_room(&room_info)?;
@@ -159,14 +238,35 @@ pub mod solana_poker {
         require!(room.player_count >= 2, PokerError::NotEnoughPlayers);
         require!(remaining.len() >= 2, PokerError::NotEnoughPlayers);
 
+        let expected_hand = room.hand_number.checked_add(1).ok_or(PokerError::InvalidBet)?;
+        require!(next_hand == expected_hand, PokerError::InvalidHandState);
+
+        let mut entropy: Vec<[u8; 32]> = Vec::new();
+        for acc in remaining.iter() {
+            let player = read_player(acc)?;
+            entropy.push(player.entropy_commitment);
+        }
+
+        let slot_hashes = SlotHashes::from_account_info(&ctx.accounts.slot_hashes)?;
+        let vrf_seed = vrf_seed_from_slot_hashes(
+            &slot_hashes,
+            &room_info.key(),
+            next_hand,
+            room.buy_in,
+            &entropy,
+        );
+        let game_seed = game_seed_from_vrf(&vrf_seed);
         let slot = Clock::get()?.slot;
-        room.hand_number += 1;
-        let game_seed = slot
-            .wrapping_mul(room.hand_number)
-            .wrapping_add(room.buy_in);
+
+        let mut deck = init_deck();
+        shuffle_deck(&mut deck, game_seed, slot);
+        let commitment = deck_commitment(&deck, &vrf_seed);
+
+        room.hand_number = next_hand;
         room.game_seed = game_seed;
-        room.deck = init_deck();
-        shuffle_deck(&mut room.deck, game_seed, slot);
+        room.vrf_seed = vrf_seed;
+        room.deck_commitment = commitment;
+        room.deck = deck;
         room.deck_pos = 0;
         room.pot = 0;
         room.community_cards = [255; COMMUNITY_CARDS];
@@ -175,23 +275,62 @@ pub mod solana_poker {
         room.min_raise = room.big_blind();
         room.phase = GamePhase::PreFlop;
 
+        let hand_state = &mut ctx.accounts.hand_state;
+        hand_state.room = room_info.key();
+        hand_state.hand_number = next_hand;
+        hand_state.vrf_seed = vrf_seed;
+        hand_state.deck_commitment = commitment;
+        hand_state.deck = deck;
+        hand_state.deck_pos = 0;
+        hand_state.hole_by_seat = [[255; HOLE_CARDS]; MAX_PLAYERS];
+        hand_state.deck_revealed = false;
+        hand_state.bump = ctx.bumps.hand_state;
+
         let room_key = room_info.key();
         let mut deck_pos = 0u8;
         for acc in remaining.iter() {
-            let card_a = room.deck[deck_pos as usize];
-            let card_b = room.deck[deck_pos as usize + 1];
+            let card_a = deck[deck_pos as usize];
+            let card_b = deck[deck_pos as usize + 1];
             deck_pos += 2;
+
+            let p = read_player(acc)?;
+            require!(p.room == room_key, PokerError::NotInRoom);
+            let seat = p.seat as usize;
+            hand_state.hole_by_seat[seat] = [card_a, card_b];
+
+            let salt_a = hole_card_salt(&vrf_seed, p.seat, 0);
+            let salt_b = hole_card_salt(&vrf_seed, p.seat, 1);
+            let comm_a = hole_card_commitment(card_a, salt_a, &p.wallet, next_hand);
+            let comm_b = hole_card_commitment(card_b, salt_b, &p.wallet, next_hand);
+
+            emit!(HoleCardsDealt {
+                wallet: p.wallet,
+                card_0: card_a,
+                card_1: card_b,
+            });
+
             with_player_mut(acc, |player| {
-                require!(player.room == room_key, PokerError::NotInRoom);
+                player.hole_commitments[0] = comm_a;
+                player.hole_commitments[1] = comm_b;
                 player.status = PlayerStatus::Active;
                 player.round_bet = 0;
                 player.total_bet = 0;
                 player.has_acted = false;
-                player.hole_cards = [card_a, card_b];
+                player.hole_cards = [255; HOLE_CARDS];
+                player.hole_revealed = false;
+                player.entropy_commitment = [0u8; 32];
                 Ok(())
             })?;
         }
         room.deck_pos = deck_pos;
+        hand_state.deck_pos = deck_pos;
+
+        emit!(HandDealt {
+            room: room_key,
+            hand_number: next_hand,
+            deck_commitment: commitment,
+            vrf_seed,
+        });
 
         room.active_count = remaining.len() as u8;
         room.dealer_seat = ((room.hand_number - 1) % room.player_count as u64) as u8;
@@ -217,6 +356,75 @@ pub mod solana_poker {
         }
 
         save_room(&room_info, &room)
+    }
+
+    /// Reveal hole cards to the player's on-chain account (commitment verified).
+    pub fn reveal_hole_cards(ctx: Context<RevealHoleCards>) -> Result<()> {
+        require!(
+            ctx.accounts.hand_state.room == ctx.accounts.room.key(),
+            PokerError::InvalidHandState
+        );
+        require!(
+            ctx.accounts.hand_state.hand_number == ctx.accounts.room.hand_number,
+            PokerError::InvalidHandState
+        );
+        require!(!ctx.accounts.player.hole_revealed, PokerError::InvalidReveal);
+
+        let seat = ctx.accounts.player.seat as usize;
+        let cards = ctx.accounts.hand_state.hole_by_seat[seat];
+        require!(cards[0] != 255 && cards[1] != 255, PokerError::InvalidReveal);
+
+        let vrf_seed = ctx.accounts.hand_state.vrf_seed;
+        let hand_number = ctx.accounts.room.hand_number;
+        let wallet = ctx.accounts.player.wallet;
+        let salts = [
+            hole_card_salt(&vrf_seed, ctx.accounts.player.seat, 0),
+            hole_card_salt(&vrf_seed, ctx.accounts.player.seat, 1),
+        ];
+        require!(
+            verify_hole_commitments(
+                cards,
+                salts,
+                ctx.accounts.player.hole_commitments,
+                &wallet,
+                hand_number,
+            ),
+            PokerError::InvalidReveal
+        );
+
+        ctx.accounts.player.hole_cards = cards;
+        ctx.accounts.player.hole_revealed = true;
+        Ok(())
+    }
+
+    /// Reveal full deck at showdown; verifies deck_commitment.
+    pub fn reveal_deck(ctx: Context<RevealDeck>) -> Result<()> {
+        require!(
+            matches!(
+                ctx.accounts.room.phase,
+                GamePhase::Showdown | GamePhase::River
+            ),
+            PokerError::InvalidPhase
+        );
+        require!(
+            ctx.accounts.hand_state.room == ctx.accounts.room.key(),
+            PokerError::InvalidHandState
+        );
+        require!(
+            ctx.accounts.hand_state.hand_number == ctx.accounts.room.hand_number,
+            PokerError::InvalidHandState
+        );
+        require!(!ctx.accounts.hand_state.deck_revealed, PokerError::DeckAlreadyRevealed);
+
+        let expected = deck_commitment(&ctx.accounts.hand_state.deck, &ctx.accounts.hand_state.vrf_seed);
+        require!(
+            expected == ctx.accounts.hand_state.deck_commitment,
+            PokerError::DeckCommitmentMismatch
+        );
+
+        ctx.accounts.hand_state.deck_revealed = true;
+        ctx.accounts.room.deck = ctx.accounts.hand_state.deck;
+        Ok(())
     }
 
     /// Player action: fold, check, call, or raise.
@@ -294,9 +502,12 @@ pub mod solana_poker {
             let pot = room.pot;
             let payout = collect_private_rake(
                 &room,
+                room_info.key(),
                 pot,
-                &ctx.accounts.vault.to_account_info(),
-                &ctx.accounts.fee_recipient.to_account_info(),
+                ctx.accounts.vault_token_account.to_account_info(),
+                ctx.accounts.fee_recipient_token_account.to_account_info(),
+                ctx.accounts.vault.to_account_info(),
+                ctx.accounts.token_program.to_account_info(),
             )?;
             credit_winner_stack(&remaining, &winner, payout)?;
             finish_hand(&mut room, &remaining)?;
@@ -304,11 +515,19 @@ pub mod solana_poker {
         }
 
         advance_turn_from_remaining(&mut room, &remaining)?;
+        let room_key = room_info.key();
+        let hand_number = room.hand_number;
+        let hole_by_seat =
+            hand_holes_from_remaining(room_key, hand_number, ctx.program_id, &remaining)?;
         try_advance_street(
             &mut room,
             &remaining,
-            &ctx.accounts.vault.to_account_info(),
-            &ctx.accounts.fee_recipient.to_account_info(),
+            room_key,
+            &hole_by_seat,
+            ctx.accounts.vault_token_account.to_account_info(),
+            ctx.accounts.fee_recipient_token_account.to_account_info(),
+            ctx.accounts.vault.to_account_info(),
+            ctx.accounts.token_program.to_account_info(),
         )?;
 
         save_room(&room_info, &room)
@@ -333,11 +552,19 @@ pub mod solana_poker {
         );
 
         if room.phase == GamePhase::River {
+            let room_key = room_info.key();
+            let hand_number = room.hand_number;
+            let hole_by_seat =
+                hand_holes_from_remaining(room_key, hand_number, ctx.program_id, &remaining)?;
             showdown_remaining(
                 &mut room,
                 &remaining,
-                &ctx.accounts.vault.to_account_info(),
-                &ctx.accounts.fee_recipient.to_account_info(),
+                room_key,
+                &hole_by_seat,
+                ctx.accounts.vault_token_account.to_account_info(),
+                ctx.accounts.fee_recipient_token_account.to_account_info(),
+                ctx.accounts.vault.to_account_info(),
+                ctx.accounts.token_program.to_account_info(),
             )?;
         } else {
             advance_phase_remaining(&mut room, &remaining)?;
@@ -345,6 +572,31 @@ pub mod solana_poker {
 
         save_room(&room_info, &room)
     }
+}
+
+fn hand_holes_from_remaining(
+    room_key: Pubkey,
+    hand_number: u64,
+    program_id: &Pubkey,
+    remaining: &[AccountInfo],
+) -> Result<[[u8; HOLE_CARDS]; MAX_PLAYERS]> {
+    let (expected, _) = Pubkey::find_program_address(
+        &[
+            b"hand",
+            room_key.as_ref(),
+            &hand_number.to_le_bytes(),
+        ],
+        program_id,
+    );
+    for acc in remaining {
+        if acc.key() == expected {
+            let hand = load_hand_state(acc)?;
+            require!(hand.room == room_key, PokerError::InvalidHandState);
+            require!(hand.hand_number == hand_number, PokerError::InvalidHandState);
+            return Ok(hand.hole_by_seat);
+        }
+    }
+    err!(PokerError::InvalidHandState)
 }
 
 fn post_blind_remaining(
@@ -430,17 +682,23 @@ fn finish_hand(room: &mut Room, remaining: &[AccountInfo]) -> Result<()> {
     room.community_count = 0;
     room.community_cards = [255; COMMUNITY_CARDS];
     room.current_bet = 0;
+    room.deck_commitment = [0u8; 32];
+    room.vrf_seed = [0u8; 32];
 
     for acc in remaining {
         with_player_mut(acc, |player| {
             player.round_bet = 0;
             player.total_bet = 0;
             player.hole_cards = [255; HOLE_CARDS];
+            player.hole_commitments = [[0u8; 32]; HOLE_CARDS];
+            player.hole_revealed = false;
+            player.entropy_commitment = [0u8; 32];
             player.status = PlayerStatus::Waiting;
             player.has_acted = false;
             Ok(())
         })?;
     }
+
     Ok(())
 }
 
@@ -480,18 +738,31 @@ fn betting_round_complete_remaining(room: &Room, remaining: &[AccountInfo]) -> R
     Ok(true)
 }
 
-fn try_advance_street(
+fn try_advance_street<'info>(
     room: &mut Room,
     remaining: &[AccountInfo],
-    vault: &AccountInfo,
-    fee_recipient: &AccountInfo,
+    room_key: Pubkey,
+    hole_by_seat: &[[u8; HOLE_CARDS]; MAX_PLAYERS],
+    vault_token_account: AccountInfo<'info>,
+    fee_recipient_token_account: AccountInfo<'info>,
+    vault: AccountInfo<'info>,
+    token_program: AccountInfo<'info>,
 ) -> Result<()> {
     if !betting_round_complete_remaining(room, remaining)? {
         return Ok(());
     }
 
     if room.phase == GamePhase::River {
-        return showdown_remaining(room, remaining, vault, fee_recipient);
+        return showdown_remaining(
+            room,
+            remaining,
+            room_key,
+            hole_by_seat,
+            vault_token_account,
+            fee_recipient_token_account,
+            vault,
+            token_program,
+        );
     }
 
     advance_phase_remaining(room, remaining)
@@ -535,11 +806,15 @@ fn advance_phase_remaining(room: &mut Room, remaining: &[AccountInfo]) -> Result
     Ok(())
 }
 
-fn showdown_remaining(
+fn showdown_remaining<'info>(
     room: &mut Room,
     remaining: &[AccountInfo],
-    vault: &AccountInfo,
-    fee_recipient: &AccountInfo,
+    room_key: Pubkey,
+    hole_by_seat: &[[u8; HOLE_CARDS]; MAX_PLAYERS],
+    vault_token_account: AccountInfo<'info>,
+    fee_recipient_token_account: AccountInfo<'info>,
+    vault: AccountInfo<'info>,
+    token_program: AccountInfo<'info>,
 ) -> Result<()> {
     let mut players: Vec<Player> = Vec::new();
     for acc in remaining {
@@ -547,8 +822,16 @@ fn showdown_remaining(
     }
 
     let pot = room.pot;
-    let payout = collect_private_rake(room, pot, vault, fee_recipient)?;
-    let results = resolve_showdown_from_data_with_pot(room, &players, payout)?;
+    let payout = collect_private_rake(
+        room,
+        room_key,
+        pot,
+        vault_token_account,
+        fee_recipient_token_account,
+        vault,
+        token_program,
+    )?;
+    let results = resolve_showdown_with_holes(room, &players, hole_by_seat, payout)?;
 
     for result in results {
         for acc in remaining {
@@ -561,17 +844,31 @@ fn showdown_remaining(
         }
     }
 
+    for acc in remaining {
+        with_player_mut(acc, |player| {
+            let holes = hole_by_seat[player.seat as usize];
+            if holes[0] != 255 {
+                player.hole_cards = holes;
+                player.hole_revealed = true;
+            }
+            Ok(())
+        })?;
+    }
+
     room.pot = 0;
     finish_hand(room, remaining)?;
     Ok(())
 }
 
-/// Transfer rake from vault to fee recipient; return net pot for winners.
-fn collect_private_rake(
+/// Transfer rake from vault token ATA to fee recipient; return net pot for winners.
+fn collect_private_rake<'info>(
     room: &Room,
+    room_key: Pubkey,
     pot: u64,
-    vault: &AccountInfo,
-    fee_recipient: &AccountInfo,
+    vault_token_account: AccountInfo<'info>,
+    fee_recipient_token_account: AccountInfo<'info>,
+    vault: AccountInfo<'info>,
+    token_program: AccountInfo<'info>,
 ) -> Result<u64> {
     if !room.is_private || pot == 0 {
         return Ok(pot);
@@ -585,73 +882,44 @@ fn collect_private_rake(
     let payout = pot.saturating_sub(rake);
 
     if rake > 0 {
-        **vault.try_borrow_mut_lamports()? = vault
-            .lamports()
-            .checked_sub(rake)
-            .ok_or(PokerError::InsufficientStack)?;
-        **fee_recipient.try_borrow_mut_lamports()? = fee_recipient
-            .lamports()
-            .checked_add(rake)
-            .ok_or(PokerError::InvalidBet)?;
+        transfer_tokens_from_vault(
+            room_key,
+            room.vault_bump,
+            vault_token_account,
+            fee_recipient_token_account,
+            vault,
+            token_program,
+            rake,
+        )?;
     }
 
     Ok(payout)
 }
 
-fn resolve_showdown_from_data_with_pot(
-    room: &Room,
-    players: &[Player],
-    pot: u64,
-) -> Result<Vec<PotResult>> {
-    let community: Vec<u8> = room.community_cards[..room.community_count as usize].to_vec();
-
-    let contenders: Vec<&Player> = players
-        .iter()
-        .filter(|p| p.status == PlayerStatus::Active || p.status == PlayerStatus::AllIn)
-        .collect();
-
-    if contenders.is_empty() {
-        return err!(PokerError::NoActivePlayers);
-    }
-
-    if contenders.len() == 1 {
-        return Ok(vec![PotResult {
-            winner_wallet: contenders[0].wallet,
-            amount: pot,
-        }]);
-    }
-
-    use crate::hand_eval::{evaluate_hand, HandRank};
-
-    let mut best_rank = HandRank::new(0, [0; 5]);
-    let mut winners: Vec<Pubkey> = Vec::new();
-
-    for p in &contenders {
-        let rank = evaluate_hand(p.hole_cards, &community);
-        if rank > best_rank {
-            best_rank = rank;
-            winners.clear();
-            winners.push(p.wallet);
-        } else if rank == best_rank {
-            winners.push(p.wallet);
-        }
-    }
-
-    let share = pot / winners.len() as u64;
-    let remainder = pot % winners.len() as u64;
-
-    let mut results = Vec::new();
-    for (i, w) in winners.iter().enumerate() {
-        let mut amount = share;
-        if i == 0 {
-            amount += remainder;
-        }
-        results.push(PotResult {
-            winner_wallet: *w,
-            amount,
-        });
-    }
-    Ok(results)
+fn transfer_tokens_from_vault<'info>(
+    room_key: Pubkey,
+    vault_bump: u8,
+    from: AccountInfo<'info>,
+    to: AccountInfo<'info>,
+    authority: AccountInfo<'info>,
+    token_program: AccountInfo<'info>,
+    amount: u64,
+) -> Result<()> {
+    let bump = [vault_bump];
+    let seeds: &[&[u8]] = &[b"vault", room_key.as_ref(), &bump];
+    let signer = &[seeds];
+    token::transfer(
+        CpiContext::new_with_signer(
+            token_program,
+            Transfer {
+                from,
+                to,
+                authority,
+            },
+            signer,
+        ),
+        amount,
+    )
 }
 
 // ─── Account contexts ───────────────────────────────────────────────────────
@@ -672,6 +940,17 @@ pub struct InitializeConfig<'info> {
 }
 
 #[derive(Accounts)]
+pub struct ConfigureMint<'info> {
+    #[account(
+        mut,
+        seeds = [b"config"],
+        bump = config.bump
+    )]
+    pub config: Account<'info, GlobalConfig>,
+    pub authority: Signer<'info>,
+}
+
+#[derive(Accounts)]
 #[instruction(tier_index: u8)]
 pub struct InitializeRoom<'info> {
     #[account(
@@ -688,20 +967,38 @@ pub struct InitializeRoom<'info> {
         bump
     )]
     pub room: Account<'info, Room>,
-    /// CHECK: PDA vault for SOL
+    /// CHECK: PDA authority for table vault token ATA
     #[account(
         seeds = [b"vault", room.key().as_ref()],
         bump
     )]
     pub vault: UncheckedAccount<'info>,
+    #[account(
+        constraint = mint.key() == config.swsop_mint @ PokerError::InvalidMint
+    )]
+    pub mint: Account<'info, Mint>,
+    #[account(
+        init,
+        payer = authority,
+        associated_token::mint = mint,
+        associated_token::authority = vault,
+    )]
+    pub vault_token_account: Account<'info, TokenAccount>,
     #[account(mut)]
     pub authority: Signer<'info>,
+    pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
 #[instruction(buy_in: u64, table_id: u64)]
 pub struct CreatePrivateTable<'info> {
+    #[account(
+        seeds = [b"config"],
+        bump = config.bump
+    )]
+    pub config: Account<'info, GlobalConfig>,
     #[account(
         init,
         payer = creator,
@@ -714,14 +1011,27 @@ pub struct CreatePrivateTable<'info> {
         bump
     )]
     pub room: Account<'info, Room>,
-    /// CHECK: PDA vault for SOL
+    /// CHECK: PDA authority for table vault token ATA
     #[account(
         seeds = [b"vault", room.key().as_ref()],
         bump
     )]
     pub vault: UncheckedAccount<'info>,
+    #[account(
+        constraint = mint.key() == config.swsop_mint @ PokerError::InvalidMint
+    )]
+    pub mint: Account<'info, Mint>,
+    #[account(
+        init,
+        payer = creator,
+        associated_token::mint = mint,
+        associated_token::authority = vault,
+    )]
+    pub vault_token_account: Account<'info, TokenAccount>,
     #[account(mut)]
     pub creator: Signer<'info>,
+    pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
 }
 
@@ -734,6 +1044,11 @@ pub struct InvitePlayer<'info> {
 
 #[derive(Accounts)]
 pub struct JoinRoom<'info> {
+    #[account(
+        seeds = [b"config"],
+        bump = config.bump
+    )]
+    pub config: Account<'info, GlobalConfig>,
     #[account(mut)]
     pub room: Account<'info, Room>,
     #[account(
@@ -746,13 +1061,29 @@ pub struct JoinRoom<'info> {
     pub player: Account<'info, Player>,
     #[account(mut)]
     pub player_wallet: Signer<'info>,
-    /// CHECK: vault PDA
+    #[account(
+        constraint = mint.key() == config.swsop_mint @ PokerError::InvalidMint
+    )]
+    pub mint: Account<'info, Mint>,
     #[account(
         mut,
+        constraint = player_token_account.owner == player_wallet.key(),
+        constraint = player_token_account.mint == mint.key(),
+    )]
+    pub player_token_account: Account<'info, TokenAccount>,
+    #[account(
+        mut,
+        constraint = vault_token_account.mint == mint.key(),
+        constraint = vault_token_account.owner == vault.key(),
+    )]
+    pub vault_token_account: Account<'info, TokenAccount>,
+    /// CHECK: vault PDA signs outbound transfers
+    #[account(
         seeds = [b"vault", room.key().as_ref()],
         bump = room.vault_bump
     )]
     pub vault: UncheckedAccount<'info>,
+    pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
 }
 
@@ -771,20 +1102,93 @@ pub struct LeaveRoom<'info> {
     pub player: Account<'info, Player>,
     #[account(mut)]
     pub player_wallet: Signer<'info>,
-    /// CHECK: vault
     #[account(
         mut,
+        constraint = player_token_account.owner == player_wallet.key(),
+    )]
+    pub player_token_account: Account<'info, TokenAccount>,
+    #[account(
+        mut,
+        constraint = vault_token_account.owner == vault.key(),
+    )]
+    pub vault_token_account: Account<'info, TokenAccount>,
+    /// CHECK: vault PDA signs outbound transfers
+    #[account(
         seeds = [b"vault", room.key().as_ref()],
         bump = room.vault_bump
     )]
     pub vault: UncheckedAccount<'info>,
+    pub token_program: Program<'info, Token>,
 }
 
 #[derive(Accounts)]
+pub struct CommitHandEntropy<'info> {
+    #[account(mut)]
+    pub room: Account<'info, Room>,
+    #[account(
+        mut,
+        seeds = [b"player", room.key().as_ref(), player_wallet.key().as_ref()],
+        bump = player.bump,
+        has_one = room,
+        constraint = player.wallet == player_wallet.key() @ PokerError::NotInRoom
+    )]
+    pub player: Account<'info, Player>,
+    pub player_wallet: Signer<'info>,
+}
+
+#[derive(Accounts)]
+#[instruction(next_hand: u64)]
 pub struct StartHand<'info> {
     #[account(mut)]
     pub room: Account<'info, Room>,
+    #[account(
+        init,
+        payer = starter,
+        space = HandState::LEN,
+        seeds = [b"hand", room.key().as_ref(), &next_hand.to_le_bytes()],
+        bump
+    )]
+    pub hand_state: Account<'info, HandState>,
+    /// CHECK: SlotHashes sysvar for VRF entropy
+    #[account(address = anchor_lang::solana_program::sysvar::slot_hashes::ID)]
+    pub slot_hashes: AccountInfo<'info>,
+    #[account(mut)]
     pub starter: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct RevealHoleCards<'info> {
+    #[account(mut)]
+    pub room: Account<'info, Room>,
+    #[account(
+        seeds = [b"hand", room.key().as_ref(), &room.hand_number.to_le_bytes()],
+        bump = hand_state.bump,
+        constraint = hand_state.room == room.key() @ PokerError::InvalidHandState
+    )]
+    pub hand_state: Account<'info, HandState>,
+    #[account(
+        mut,
+        seeds = [b"player", room.key().as_ref(), player_wallet.key().as_ref()],
+        bump = player.bump,
+        has_one = room,
+        constraint = player.wallet == player_wallet.key() @ PokerError::NotInRoom
+    )]
+    pub player: Account<'info, Player>,
+    pub player_wallet: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct RevealDeck<'info> {
+    #[account(mut)]
+    pub room: Account<'info, Room>,
+    #[account(
+        mut,
+        seeds = [b"hand", room.key().as_ref(), &room.hand_number.to_le_bytes()],
+        bump = hand_state.bump,
+        constraint = hand_state.room == room.key() @ PokerError::InvalidHandState
+    )]
+    pub hand_state: Account<'info, HandState>,
 }
 
 #[derive(Accounts)]
@@ -799,46 +1203,58 @@ pub struct PlayerActionCtx<'info> {
     )]
     pub player: Account<'info, Player>,
     pub player_wallet: Signer<'info>,
-    /// CHECK: vault PDA holding table SOL
-    #[account(
-        mut,
-        seeds = [b"vault", room.key().as_ref()],
-        bump = room.vault_bump
-    )]
-    pub vault: UncheckedAccount<'info>,
     #[account(
         seeds = [b"config"],
         bump = config.bump
     )]
     pub config: Account<'info, GlobalConfig>,
-    /// CHECK: platform fee wallet (must match config authority)
     #[account(
         mut,
-        constraint = fee_recipient.key() == config.authority @ PokerError::InvalidBet
+        constraint = vault_token_account.mint == config.swsop_mint @ PokerError::InvalidMint,
+        constraint = vault_token_account.owner == vault.key(),
     )]
-    pub fee_recipient: UncheckedAccount<'info>,
+    pub vault_token_account: Account<'info, TokenAccount>,
+    /// CHECK: vault PDA signs rake transfers
+    #[account(
+        seeds = [b"vault", room.key().as_ref()],
+        bump = room.vault_bump
+    )]
+    pub vault: UncheckedAccount<'info>,
+    #[account(
+        mut,
+        constraint = fee_recipient_token_account.mint == config.swsop_mint @ PokerError::InvalidMint,
+        constraint = fee_recipient_token_account.owner == config.authority @ PokerError::InvalidBet,
+    )]
+    pub fee_recipient_token_account: Account<'info, TokenAccount>,
+    pub token_program: Program<'info, Token>,
 }
 
 #[derive(Accounts)]
 pub struct AdvanceStreet<'info> {
     #[account(mut)]
     pub room: Account<'info, Room>,
-    /// CHECK: vault PDA holding table SOL
-    #[account(
-        mut,
-        seeds = [b"vault", room.key().as_ref()],
-        bump = room.vault_bump
-    )]
-    pub vault: UncheckedAccount<'info>,
     #[account(
         seeds = [b"config"],
         bump = config.bump
     )]
     pub config: Account<'info, GlobalConfig>,
-    /// CHECK: platform fee wallet (must match config authority)
     #[account(
         mut,
-        constraint = fee_recipient.key() == config.authority @ PokerError::InvalidBet
+        constraint = vault_token_account.mint == config.swsop_mint @ PokerError::InvalidMint,
+        constraint = vault_token_account.owner == vault.key(),
     )]
-    pub fee_recipient: UncheckedAccount<'info>,
+    pub vault_token_account: Account<'info, TokenAccount>,
+    /// CHECK: vault PDA signs rake transfers
+    #[account(
+        seeds = [b"vault", room.key().as_ref()],
+        bump = room.vault_bump
+    )]
+    pub vault: UncheckedAccount<'info>,
+    #[account(
+        mut,
+        constraint = fee_recipient_token_account.mint == config.swsop_mint @ PokerError::InvalidMint,
+        constraint = fee_recipient_token_account.owner == config.authority @ PokerError::InvalidBet,
+    )]
+    pub fee_recipient_token_account: Account<'info, TokenAccount>,
+    pub token_program: Program<'info, Token>,
 }

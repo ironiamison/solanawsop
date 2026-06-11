@@ -150,6 +150,22 @@ export async function handleDemoTakeSeat(sessionId: string) {
   });
 }
 
+export async function handleDemoSitOut(sessionId: string, sitOut: boolean) {
+  return withDemoRoom((room) => {
+    if (!sessionId || !room.findPlayer(sessionId)) {
+      return { ok: false as const, error: "Must be seated", status: 400 };
+    }
+    const result = room.setSitOut(sessionId, sitOut);
+    return {
+      ...result,
+      sitOut,
+      state: room.getView(sessionId),
+      lobby: lobbyStatsFrom(room),
+      status: result.ok ? 200 : 400,
+    };
+  });
+}
+
 export async function handleDemoStartHand(sessionId: string) {
   return withDemoRoom((room) => {
     if (!sessionId || !room.findPlayer(sessionId)) {

@@ -26,10 +26,20 @@ export default function ChipFlyLayer({ flies }: { flies: ChipFly[] }) {
             {Array.from({ length: fly.chipCount }).map((_, i) => (
               <span
                 key={i}
-                className="premium-chip-fly"
+                className={
+                  fly.direction === "from-pot"
+                    ? "premium-chip-fly premium-chip-fly-from-pot"
+                    : "premium-chip-fly"
+                }
                 style={{
                   animationDelay: `${i * 45}ms`,
                   background: `linear-gradient(135deg, ${CHIP_COLORS[i % CHIP_COLORS.length]}, #1a1a22)`,
+                  ...(fly.direction === "from-pot"
+                    ? ({
+                        "--fly-to-x": coord.left,
+                        "--fly-to-y": coord.top,
+                      } as React.CSSProperties)
+                    : {}),
                 }}
               />
             ))}

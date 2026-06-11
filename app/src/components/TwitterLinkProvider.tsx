@@ -8,7 +8,9 @@ import {
   useRef,
   useState,
 } from "react";
-import { useLinkWithOAuth, usePrivy, useUser } from "@privy-io/react-auth";
+import { useLinkAccount, usePrivy, useUser } from "@privy-io/react-auth";
+import { APP_URL } from "@/lib/constants";
+
 function privyLinkErrorMessage(err: unknown): string {
   const e = err as { code?: string; message?: string } | undefined;
   const msg = e?.message ?? "";
@@ -16,11 +18,17 @@ function privyLinkErrorMessage(err: unknown): string {
   const combined = `${code} ${msg}`.toLowerCase();
 
   if (
+    combined.includes("login with twitter not allowed") ||
+    combined.includes("not allowed")
+  ) {
+    return "Link X from your connected wallet — enable Twitter under Privy → Login methods and add Allowed domains for " + APP_URL;
+  }
+  if (
     combined.includes("origin") ||
     combined.includes("domain") ||
     combined.includes("redirect")
   ) {
-    return "X blocked — in Privy dashboard add https://solanawsop.com under Allowed domains and enable Twitter.";
+    return `X blocked — in Privy dashboard add ${APP_URL} under Allowed domains and enable Twitter.`;
   }
   if (combined.includes("disabled") || combined.includes("not enabled")) {
     return "Twitter/X is not enabled in Privy — turn it on under Login methods.";
@@ -29,7 +37,7 @@ function privyLinkErrorMessage(err: unknown): string {
     return "X login cancelled.";
   }
   if (msg) return msg;
-  return "Could not open X. Connect your wallet first, then try again.";
+  return "Could not link X. Connect your wallet first, then try again.";
 }
 
 type TwitterLinkContextValue = {
@@ -43,11 +51,10 @@ const TwitterLinkContext = createContext<TwitterLinkContextValue | null>(null);
 
 /** Keeps OAuth link flow mounted app-wide so X redirect-back completes. */
 export function TwitterLinkProvider({ children }: { children: React.ReactNode }) {
-  const { authenticated, ready, login, getAccessToken } = usePrivy();
+  const { authenticated, ready, login, getAccessToken, user } = usePrivy();
   const { refreshUser } = useUser();
-  const { initOAuth, state, loading } = useLinkWithOAuth();
   const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
+  const [linking, setLinking] = useState(false);
   const syncedRef = useRef(false);
 
   const syncProfile = useCallback(async () => {
@@ -73,72 +80,60 @@ export function TwitterLinkProvider({ children }: { children: React.ReactNode })
     return data;
   }, [getAccessToken]);
 
-  useEffect(() => {
-    if (state.status === "loading") {
-      setPending(true);
-      return;
-    }
-
-    if (state.status === "done" && !syncedRef.current) {
+  const { linkTwitter } = useLinkAccount({
+    onSuccess: async () => {
+      if (syncedRef.current) return;
       syncedRef.current = true;
-      setPending(false);
-      void (async () => {
-        try {
-          await refreshUser();
-          await syncProfile();
-          setError(null);
-        } catch (e) {
-          setError(e instanceof Error ? e.message : "Profile sync failed after linking X.");
-        } finally {
-          syncedRef.current = false;
-        }
-      })();
-      return;
-    }
-
-    if (state.status === "error") {
-      setPending(false);
+      setLinking(false);
+      try {
+        await refreshUser();
+        await syncProfile();
+        setError(null);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Profile sync failed after linking X.");
+      } finally {
+        syncedRef.current = false;
+      }
+    },
+    onError: (err) => {
+      setLinking(false);
       syncedRef.current = false;
-      setError(privyLinkErrorMessage(state.error));
-    }
-  }, [state, refreshUser, syncProfile]);
+      setError(privyLinkErrorMessage(err));
+    },
+  });
 
-  useEffect(() => {
-    if (!pending) return;
-    const timer = window.setTimeout(() => {
-      setPending(false);
-      setError(
-        "X didn't open — allow pop-ups/redirects for this site, or enable Twitter in your Privy dashboard."
-      );
-    }, 12_000);
-    return () => clearTimeout(timer);
-  }, [pending]);
+  const hasTwitter = user?.linkedAccounts?.some(
+    (a) => a.type === "twitter_oauth"
+  );
 
   const connectTwitter = useCallback(() => {
-    void (async () => {
-      setError(null);
+    setError(null);
 
-      if (!ready) {
-        setError("Still loading — wait a moment and try again.");
-        return;
-      }
+    if (!ready) {
+      setError("Still loading — wait a moment and try again.");
+      return;
+    }
 
-      if (!authenticated) {
-        login({ loginMethods: ["wallet", "twitter", "email"] });
-        return;
-      }
+    if (!authenticated) {
+      login({ loginMethods: ["wallet", "twitter", "email"] });
+      return;
+    }
 
-      setPending(true);
-      try {
-        await initOAuth({ provider: "twitter" });
-      } catch (e) {
-        setPending(false);
-        setError(privyLinkErrorMessage(e));
-      }
-    })();
-  }, [ready, authenticated, login, initOAuth]);
+    if (hasTwitter) {
+      void syncProfile().catch((e) =>
+        setError(e instanceof Error ? e.message : "Profile sync failed.")
+      );
+      return;
+    }
 
-  const linking = pending || loading || state.status === "loading";
+    setLinking(true);
+    try {
+      linkTwitter();
+    } catch (e) {
+      setLinking(false);
+      setError(privyLinkErrorMessage(e));
+    }
+  }, [ready, authenticated, login, linkTwitter, hasTwitter, syncProfile]);
 
   return (
     <TwitterLinkContext.Provider

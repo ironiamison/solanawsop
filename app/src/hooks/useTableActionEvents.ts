@@ -8,6 +8,8 @@ export interface ChipFly {
   id: number;
   visualSeat: number;
   chipCount: number;
+  /** Seat → pot (default) or pot → seat */
+  direction?: "to-pot" | "from-pot";
 }
 
 interface PlayerSnap {

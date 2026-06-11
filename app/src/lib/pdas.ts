@@ -19,6 +19,18 @@ export function vaultPda(room: PublicKey): [PublicKey, number] {
   );
 }
 
+export function handPda(
+  room: PublicKey,
+  handNumber: number | bigint
+): [PublicKey, number] {
+  const handBuf = Buffer.alloc(8);
+  handBuf.writeBigUInt64LE(BigInt(handNumber));
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("hand"), room.toBuffer(), handBuf],
+    PROGRAM_ID
+  );
+}
+
 export function playerPda(room: PublicKey, wallet: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("player"), room.toBuffer(), wallet.toBuffer()],

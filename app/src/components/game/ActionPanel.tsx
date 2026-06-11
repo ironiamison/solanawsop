@@ -10,10 +10,12 @@ interface Props {
   timerSecondsLeft?: number;
   timerProgress?: number;
   timerUrgent?: boolean;
+  timerLabel?: string;
   canCheck: boolean;
   callAmount: number;
   pot: number;
   stack: number;
+  roundBet: number;
   minRaise: number;
   currentBet: number;
   betAmount: number;
@@ -32,10 +34,12 @@ export default function ActionPanel({
   timerSecondsLeft,
   timerProgress,
   timerUrgent,
+  timerLabel,
   canCheck,
   callAmount,
   pot,
   stack,
+  roundBet,
   minRaise,
   currentBet,
   betAmount,
@@ -47,30 +51,49 @@ export default function ActionPanel({
   pending,
   formatAmount = formatTokens,
 }: Props) {
-  const maxBet = stack + (currentBet > 0 ? callAmount : 0);
-  const raiseToMin = currentBet + minRaise;
-  const minBet = Math.min(maxBet, Math.max(raiseToMin, callAmount + minRaise));
+  const maxRaiseTo = roundBet + stack;
+  const minRaiseTo =
+    currentBet === 0
+      ? Math.min(maxRaiseTo, minRaise)
+      : Math.min(maxRaiseTo, currentBet + minRaise);
+  const isOpeningBet = currentBet === 0;
+  const canBetOrRaise = maxRaiseTo >= minRaiseTo;
 
-  const pct = useMemo(() => {
-    if (maxBet <= minBet) return 100;
-    return ((betAmount - minBet) / (maxBet - minBet)) * 100;
-  }, [betAmount, minBet, maxBet]);
+  const clampedBet = Math.min(maxRaiseTo, Math.max(minRaiseTo, betAmount));
+  const effectiveMinRaise = Math.max(1, minRaise);
+
+  const sliderPct = useMemo(() => {
+    if (maxRaiseTo <= minRaiseTo) return 100;
+    return ((clampedBet - minRaiseTo) / (maxRaiseTo - minRaiseTo)) * 100;
+  }, [clampedBet, minRaiseTo, maxRaiseTo]);
 
   if (!visible && !showShell) return null;
 
-  const setPct = (p: number) => {
-    const raw = minBet + ((maxBet - minBet) * p) / 100;
+  const setSliderPct = (pct: number) => {
+    const p = Math.min(100, Math.max(0, pct));
+    const raw = minRaiseTo + ((maxRaiseTo - minRaiseTo) * p) / 100;
     onBetAmountChange(Math.floor(raw));
   };
 
-  const raiseTotal = betAmount;
-  const isRaise = raiseTotal >= raiseToMin;
-  const step = minRaise;
-  const displayAmount = Math.floor(betAmount / Math.pow(10, TOKEN_DECIMALS));
+  const setPotBet = () => {
+    const potRaiseTo = Math.min(maxRaiseTo, currentBet + pot + callAmount);
+    onBetAmountChange(Math.max(minRaiseTo, potRaiseTo));
+  };
+
+  const step = effectiveMinRaise;
+  const displayAmount = Number(clampedBet) / Math.pow(10, TOKEN_DECIMALS);
 
   const bump = (delta: number) => {
-    onBetAmountChange(Math.min(maxBet, Math.max(minBet, betAmount + delta)));
+    onBetAmountChange(
+      Math.min(maxRaiseTo, Math.max(minRaiseTo, clampedBet + delta))
+    );
   };
+
+  const raiseIncrement = clampedBet - currentBet;
+  const betReady =
+    canBetOrRaise &&
+    raiseIncrement >= effectiveMinRaise &&
+    clampedBet <= maxRaiseTo;
 
   const showTimer =
     visible && timerSecondsLeft !== undefined && timerProgress !== undefined;
@@ -86,6 +109,7 @@ export default function ActionPanel({
           secondsLeft={timerSecondsLeft}
           progress={timerProgress}
           urgent={timerUrgent}
+          label={timerLabel}
         />
       )}
       <div className="mb-2.5 flex flex-wrap items-center justify-center gap-2">
@@ -116,59 +140,77 @@ export default function ActionPanel({
             Call {formatAmount(callAmount)}
           </button>
         )}
-        <button
-          type="button"
-          onClick={onRaise}
-          disabled={pending || !visible || betAmount < minBet}
-          className="opoker-action-btn opoker-action-bet"
-        >
-          Bet {formatAmount(raiseTotal)}
-        </button>
-        <button
-          type="button"
-          onClick={onRaise}
-          disabled={pending || !visible || !isRaise}
-          className={`opoker-action-btn opoker-action-raise ${isRaise ? "opoker-action-raise-hot" : ""}`}
-        >
-          {isRaise ? `Raise to ${formatAmount(raiseTotal)}` : "Raise"}
-        </button>
+        {isOpeningBet ? (
+          <button
+            type="button"
+            onClick={onRaise}
+            disabled={pending || !visible || !betReady}
+            className={`opoker-action-btn opoker-action-raise ${betReady ? "opoker-action-raise-hot" : ""}`}
+          >
+            Bet {formatAmount(clampedBet)}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={onRaise}
+            disabled={pending || !visible || !betReady}
+            className={`opoker-action-btn opoker-action-raise ${betReady ? "opoker-action-raise-hot" : ""}`}
+          >
+            Raise to {formatAmount(clampedBet)}
+          </button>
+        )}
       </div>
 
       <div className="flex flex-col items-center gap-2 sm:flex-row">
         <input
           type="range"
-          min={minBet}
-          max={maxBet}
-          value={Math.min(betAmount, maxBet)}
-          onChange={(e) => onBetAmountChange(Number(e.target.value))}
-          disabled={!visible}
+          min={0}
+          max={100}
+          step={1}
+          value={sliderPct}
+          onChange={(e) => setSliderPct(Number(e.target.value))}
+          disabled={!visible || !canBetOrRaise}
           className="bet-slider w-full max-w-md flex-1"
-          style={{ "--pct": `${pct}%` } as React.CSSProperties}
+          style={{ "--pct": `${sliderPct}%` } as React.CSSProperties}
         />
         <div className="flex flex-wrap justify-center gap-1">
           {[
             { label: "33%", p: 33 },
             { label: "50%", p: 50 },
             { label: "75%", p: 75 },
-            { label: "Pot", p: pot > 0 ? Math.min(100, (pot / maxBet) * 100) : 50 },
-            { label: "All in", p: 100 },
           ].map(({ label, p }) => (
             <button
               key={label}
               type="button"
-              onClick={() => setPct(p)}
-              disabled={!visible}
+              onClick={() => setSliderPct(p)}
+              disabled={!visible || !canBetOrRaise}
               className="quick-bet-btn"
             >
               {label}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={setPotBet}
+            disabled={!visible || !canBetOrRaise}
+            className="quick-bet-btn"
+          >
+            Pot
+          </button>
+          <button
+            type="button"
+            onClick={() => onBetAmountChange(maxRaiseTo)}
+            disabled={!visible || !canBetOrRaise}
+            className="quick-bet-btn"
+          >
+            All in
+          </button>
         </div>
         <div className="flex items-center gap-1">
           <button
             type="button"
             onClick={() => bump(-step)}
-            disabled={!visible}
+            disabled={!visible || !canBetOrRaise}
             className="opoker-step-btn"
             aria-label="Decrease"
           >
@@ -178,20 +220,26 @@ export default function ActionPanel({
             <span className="text-xs">🪙</span>
             <input
               type="number"
-              value={displayAmount}
-              disabled={!visible}
-              onChange={(e) =>
+              step="any"
+              min={minRaiseTo / Math.pow(10, TOKEN_DECIMALS)}
+              max={maxRaiseTo / Math.pow(10, TOKEN_DECIMALS)}
+              value={Number.isInteger(displayAmount) ? displayAmount : displayAmount.toFixed(1)}
+              disabled={!visible || !canBetOrRaise}
+              onChange={(e) => {
+                const human = parseFloat(e.target.value || "0");
+                if (!Number.isFinite(human)) return;
+                const raw = Math.round(human * Math.pow(10, TOKEN_DECIMALS));
                 onBetAmountChange(
-                  Math.floor(parseFloat(e.target.value || "0") * Math.pow(10, TOKEN_DECIMALS))
-                )
-              }
+                  Math.min(maxRaiseTo, Math.max(minRaiseTo, raw))
+                );
+              }}
               className="w-14 bg-transparent text-center text-sm font-bold tabular-nums text-white outline-none"
             />
           </div>
           <button
             type="button"
             onClick={() => bump(step)}
-            disabled={!visible}
+            disabled={!visible || !canBetOrRaise}
             className="opoker-step-btn"
             aria-label="Increase"
           >

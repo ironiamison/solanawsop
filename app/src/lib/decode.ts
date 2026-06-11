@@ -64,10 +64,21 @@ export function decodeRoom(pubkey: PublicKey, data: Buffer): RoomState {
   offset += 1;
   offset += 1; // last_raiser_seat
   offset += 1; // active_count
-  offset += 52; // deck
+  const deck: number[] = [];
+  for (let i = 0; i < 52; i++) {
+    const [c] = readU8(data, offset);
+    deck.push(c);
+    offset += 1;
+  }
   offset += 1; // deck_pos
-  offset += 8; // hand_number
-  offset += 8; // game_seed
+  const [handNumber] = readU64(data, offset);
+  offset += 8;
+  const [gameSeed] = readU64(data, offset);
+  offset += 8;
+  const vrfSeed = new Uint8Array(data.subarray(offset, offset + 32));
+  offset += 32;
+  const deckCommitment = new Uint8Array(data.subarray(offset, offset + 32));
+  offset += 32;
   const seats: PublicKey[] = [];
   for (let i = 0; i < 6; i++) {
     const [pk] = readPubkey(data, offset);
@@ -103,6 +114,11 @@ export function decodeRoom(pubkey: PublicKey, data: Buffer): RoomState {
     isPrivate: isPrivateRaw === 1,
     creator,
     invited,
+    handNumber: Number(handNumber),
+    gameSeed,
+    vrfSeed,
+    deckCommitment,
+    deck,
   };
 }
 
@@ -126,6 +142,10 @@ export function decodePlayer(pubkey: PublicKey, data: Buffer): PlayerState {
     holeCards.push(c);
     offset += 1;
   }
+  offset += 64; // hole_commitments
+  const [holeRevealed] = readBool(data, offset);
+  offset += 1;
+  offset += 32; // entropy_commitment
   const [statusRaw] = readU8(data, offset);
   offset += 1;
   const [hasActed] = readBool(data, offset);
@@ -139,6 +159,7 @@ export function decodePlayer(pubkey: PublicKey, data: Buffer): PlayerState {
     roundBet: Number(roundBet),
     totalBet: Number(totalBet),
     holeCards,
+    holeRevealed,
     status: decodePlayerStatus(statusRaw),
     hasActed,
   };

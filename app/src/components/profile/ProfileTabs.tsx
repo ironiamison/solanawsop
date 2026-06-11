@@ -11,7 +11,7 @@ const TABS: {
   comingSoon?: boolean;
 }[] = [
   { id: "overview", label: "Overview" },
-  { id: "tables", label: "Private tables", comingSoon: true },
+  { id: "tables", label: "Private tables" },
   { id: "rewards", label: "Rewards" },
   { id: "friends", label: "Friends", badgeKey: "pendingFriends" },
   { id: "messages", label: "Messages", badgeKey: "unreadMessages" },

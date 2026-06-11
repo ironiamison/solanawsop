@@ -1975,7 +1975,7 @@ body {
   flex-direction: row;
   align-items: flex-end;
   gap: 1.25rem;
-  padding: 0 1rem 0.75rem;
+  padding: 0 1rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
   min-height: 11rem;
   isolation: isolate;
 }
@@ -2801,7 +2801,10 @@ body {
 }
 
 .premium-seat-hero {
-  z-index: 30;
+  z-index: 18;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .premium-seat-folded {
@@ -2922,6 +2925,35 @@ body {
     top: 42%;
     opacity: 0;
     transform: translate(-50%, -50%) scale(0.45);
+  }
+}
+
+.premium-chip-fly-from-pot {
+  left: 50%;
+  top: 42%;
+  animation: premium-chip-fly-from-pot 0.72s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes premium-chip-fly-from-pot {
+  0% {
+    left: 50%;
+    top: 42%;
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.35);
+  }
+  12% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.05);
+  }
+  75% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    left: var(--fly-to-x);
+    top: var(--fly-to-y);
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.7);
   }
 }
 
@@ -3302,8 +3334,39 @@ body {
   50% { opacity: 0.55; }
 }
 
+.hand-win-toast-card {
+  animation: hand-win-pop 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.premium-sitout-badge {
+  position: absolute;
+  top: -0.55rem;
+  right: -0.25rem;
+  z-index: 30;
+  border-radius: 9999px;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  background: rgba(120, 53, 15, 0.85);
+  padding: 0.15rem 0.45rem;
+  font-size: 0.55rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fde68a;
+}
+
+@keyframes hand-win-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.92);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 .premium-hero-hand {
-  transform: translateY(-4px);
+  margin-bottom: 0.35rem;
 }
 
 .premium-hand-rank {

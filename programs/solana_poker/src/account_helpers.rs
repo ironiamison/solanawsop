@@ -1,4 +1,4 @@
-use crate::state::{Player, Room};
+use crate::state::{HandState, Player, Room};
 use anchor_lang::prelude::*;
 
 pub fn load_room(info: &AccountInfo) -> Result<Room> {
@@ -31,4 +31,10 @@ pub fn read_player(acc: &AccountInfo) -> Result<Player> {
     let data = acc.try_borrow_data()?;
     let mut slice: &[u8] = &data[8..];
     Player::try_deserialize(&mut slice).map_err(Into::into)
+}
+
+pub fn load_hand_state(info: &AccountInfo) -> Result<HandState> {
+    let data = info.try_borrow_data()?;
+    let mut slice: &[u8] = &data[8..];
+    HandState::try_deserialize(&mut slice).map_err(Into::into)
 }

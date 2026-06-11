@@ -47,7 +47,7 @@ export async function withDemoRoom<T>(
   fn: (room: DemoRoomEngine) => T | Promise<T>
 ): Promise<T> {
   const room = await loadDemoRoom();
-  room.checkTurnTimeout();
+  room.tick();
   const result = await fn(room);
   await saveDemoRoom(room);
   return result;

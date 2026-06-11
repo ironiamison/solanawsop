@@ -1,6 +1,11 @@
 import type { GamePhase, PlayerStatus } from "@/lib/types";
-import { ACTION_TIMER_MS } from "@/lib/game/turnTimer";
 import {
+  ACTION_TIMER_MS,
+  consumeTimeBank,
+  TIME_BANK_MS,
+} from "@/lib/game/turnTimer";
+import {
+  AUTO_DEAL_DELAY_MS,
   DEMO_BIG_BLIND,
   DEMO_BUY_IN,
   DEMO_MAX_PLAYERS,
@@ -9,7 +14,13 @@ import {
   DEMO_START_STACK,
 } from "./constants";
 import { compareHands, evaluateHand } from "./handEval";
-import type { DemoAction, DemoPlayer, DemoRoomView, DemoSpectator } from "./types";
+import type {
+  DemoAction,
+  DemoHandWin,
+  DemoPlayer,
+  DemoRoomView,
+  DemoSpectator,
+} from "./types";
 
 const EMPTY_CARD = 255;
 
@@ -28,8 +39,14 @@ function shuffleDeck(deck: number[], seed: number): void {
   }
 }
 
+export interface DemoRoomOptions {
+  roomId?: string;
+  startStack?: number;
+}
+
 export class DemoRoomEngine {
-  readonly roomId = DEMO_ROOM_ID;
+  readonly roomId: string;
+  readonly startStack: number;
   phase: GamePhase = "waiting";
   pot = 0;
   communityCards = [EMPTY_CARD, EMPTY_CARD, EMPTY_CARD, EMPTY_CARD, EMPTY_CARD];
@@ -45,12 +62,32 @@ export class DemoRoomEngine {
   deckPos = 0;
   handNumber = 0;
   statusMessage: string | null = null;
+  lastHandWin: DemoHandWin | null = null;
+  autoDealAt: number | null = null;
 
   private showdownTimer: ReturnType<typeof setTimeout> | null = null;
   private stateListeners = new Set<() => void>();
   private players = new Map<string, DemoPlayer>();
   private spectators = new Map<string, DemoSpectator>();
   private seatToSession: (string | null)[] = Array(DEMO_MAX_PLAYERS).fill(null);
+
+  constructor(opts?: DemoRoomOptions) {
+    this.roomId = opts?.roomId ?? DEMO_ROOM_ID;
+    this.startStack = opts?.startStack ?? DEMO_START_STACK;
+  }
+
+  private scaledBlind(multiple: number): number {
+    const ratio = this.startStack / DEMO_START_STACK;
+    return Math.max(1, Math.floor(multiple * ratio));
+  }
+
+  private smallBlindAmount(): number {
+    return this.scaledBlind(DEMO_SMALL_BLIND);
+  }
+
+  private bigBlindAmount(): number {
+    return this.scaledBlind(DEMO_BIG_BLIND);
+  }
 
   onStateChange(listener: () => void): () => void {
     this.stateListeners.add(listener);
@@ -115,6 +152,27 @@ export class DemoRoomEngine {
     return false;
   }
 
+  /** Seat a bot player at a fixed seat (practice tables only) */
+  addBotPlayer(seat: number, sessionId: string, username: string): void {
+    if (this.phase !== "waiting" || this.seatToSession[seat]) return;
+    const player: DemoPlayer = {
+      sessionId,
+      username,
+      socketId: `bot-${seat}`,
+      seat,
+      stack: this.startStack,
+      roundBet: 0,
+      totalBet: 0,
+      holeCards: [EMPTY_CARD, EMPTY_CARD],
+      status: "waiting",
+      hasActed: false,
+      timeBankMs: TIME_BANK_MS,
+      sitOutNextHand: false,
+    };
+    this.players.set(sessionId, player);
+    this.seatToSession[seat] = sessionId;
+  }
+
   joinAsPlayer(
     sessionId: string,
     username: string,
@@ -131,6 +189,7 @@ export class DemoRoomEngine {
     if (existing) {
       existing.socketId = socketId;
       existing.username = username;
+      this.maybeScheduleAutoDeal();
       return { ok: true };
     }
     const seat = this.seatToSession.findIndex((s) => s === null);
@@ -141,15 +200,18 @@ export class DemoRoomEngine {
       username,
       socketId,
       seat,
-      stack: DEMO_START_STACK,
+      stack: this.startStack,
       roundBet: 0,
       totalBet: 0,
       holeCards: [EMPTY_CARD, EMPTY_CARD],
       status: "waiting",
       hasActed: false,
+      timeBankMs: TIME_BANK_MS,
+      sitOutNextHand: false,
     };
     this.players.set(sessionId, player);
     this.seatToSession[seat] = sessionId;
+    this.maybeScheduleAutoDeal();
     return { ok: true };
   }
 
@@ -169,6 +231,7 @@ export class DemoRoomEngine {
     }
     this.players.delete(sessionId);
     this.seatToSession[player.seat] = null;
+    this.maybeScheduleAutoDeal();
     return { ok: true };
   }
 
@@ -192,10 +255,96 @@ export class DemoRoomEngine {
     }
   }
 
-  startHand(requesterId: string): { ok: true } | { ok: false; error: string } {
+  /** Players eligible for the next deal (seated, not sitting out, have chips) */
+  private readyToPlayPlayers(): DemoPlayer[] {
+    return [...this.players.values()]
+      .filter((p) => !p.sitOutNextHand && p.stack > 0)
+      .sort((a, b) => a.seat - b.seat);
+  }
+
+  private nextDealtSeat(from: number): number | null {
+    for (let i = 1; i <= DEMO_MAX_PLAYERS; i++) {
+      const seat = (from + i) % DEMO_MAX_PLAYERS;
+      const p = this.playerAtSeat(seat);
+      if (p && !p.sitOutNextHand && p.stack > 0) return seat;
+    }
+    return null;
+  }
+
+  private clearAutoDealSchedule(): void {
+    this.autoDealAt = null;
+  }
+
+  private scheduleAutoDeal(): void {
+    this.autoDealAt = Date.now() + AUTO_DEAL_DELAY_MS;
+  }
+
+  private maybeScheduleAutoDeal(): void {
+    if (this.phase !== "waiting") return;
+    if (this.readyToPlayPlayers().length < 2) {
+      this.clearAutoDealSchedule();
+      return;
+    }
+    if (!this.autoDealAt) this.scheduleAutoDeal();
+  }
+
+  /** Called on each server tick — starts the next hand when the delay elapses */
+  processAutoDeal(): boolean {
+    if (this.phase !== "waiting" || !this.autoDealAt) return false;
+    if (Date.now() < this.autoDealAt) return false;
+    this.autoDealAt = null;
+    const result = this.startHandInternal();
+    if (!result.ok) this.maybeScheduleAutoDeal();
+    return result.ok;
+  }
+
+  /** Run turn timeouts and scheduled auto-deals */
+  tick(): boolean {
+    let changed = this.checkTurnTimeout();
+    if (this.processAutoDeal()) changed = true;
+    return changed;
+  }
+
+  setSitOut(
+    sessionId: string,
+    sitOut: boolean
+  ): { ok: true } | { ok: false; error: string } {
+    const player = this.players.get(sessionId);
+    if (!player) return { ok: false, error: "Not seated" };
+    if (this.phase !== "waiting") {
+      return { ok: false, error: "Can only sit out between hands" };
+    }
+    player.sitOutNextHand = sitOut;
+    if (sitOut) {
+      this.statusMessage = `${player.username} is sitting out`;
+    } else if (this.statusMessage?.includes("sitting out")) {
+      this.statusMessage = null;
+    }
+    this.maybeScheduleAutoDeal();
+    return { ok: true };
+  }
+
+  toggleSitOut(sessionId: string): { ok: true; sitOut: boolean } | { ok: false; error: string } {
+    const player = this.players.get(sessionId);
+    if (!player) return { ok: false, error: "Not seated" };
+    const result = this.setSitOut(sessionId, !player.sitOutNextHand);
+    if (!result.ok) return result;
+    return { ok: true, sitOut: player.sitOutNextHand };
+  }
+
+  startHand(_requesterId: string): { ok: true } | { ok: false; error: string } {
+    return this.startHandInternal();
+  }
+
+  private startHandInternal(): { ok: true } | { ok: false; error: string } {
     this.clearShowdownTimer();
+    this.clearAutoDealSchedule();
     if (this.phase !== "waiting") return { ok: false, error: "Hand already running" };
-    if (this.players.size < 2) return { ok: false, error: "Need at least 2 players" };
+
+    const playing = this.readyToPlayPlayers();
+    if (playing.length < 2) {
+      return { ok: false, error: "Need at least 2 players not sitting out" };
+    }
 
     this.handNumber++;
     const seed = Date.now() ^ (this.handNumber * 9973);
@@ -206,45 +355,61 @@ export class DemoRoomEngine {
     this.communityCards = [EMPTY_CARD, EMPTY_CARD, EMPTY_CARD, EMPTY_CARD, EMPTY_CARD];
     this.communityCount = 0;
     this.currentBet = 0;
-    this.minRaise = DEMO_BIG_BLIND;
+    const sb = this.smallBlindAmount();
+    const bb = this.bigBlindAmount();
+    this.minRaise = bb;
     this.phase = "preFlop";
     this.statusMessage = null;
+    this.lastHandWin = null;
 
-    const seated = [...this.players.values()].sort((a, b) => a.seat - b.seat);
-    for (const p of seated) {
-      p.holeCards = [this.deck[this.deckPos], this.deck[this.deckPos + 1]];
-      this.deckPos += 2;
-      p.status = "active";
+    for (const p of this.players.values()) {
       p.roundBet = 0;
       p.totalBet = 0;
       p.hasActed = false;
+      if (p.sitOutNextHand || p.stack <= 0) {
+        p.status = "waiting";
+        p.holeCards = [EMPTY_CARD, EMPTY_CARD];
+        continue;
+      }
+      p.holeCards = [this.deck[this.deckPos], this.deck[this.deckPos + 1]];
+      this.deckPos += 2;
+      p.status = "active";
     }
-    this.activeCount = seated.length;
-    this.dealerSeat = seated[(this.handNumber - 1) % seated.length].seat;
 
-    const sbSeat = this.nextOccupiedSeat(this.dealerSeat)!;
-    const bbSeat = this.nextOccupiedSeat(sbSeat)!;
-    this.postBlind(sbSeat, DEMO_SMALL_BLIND);
-    this.postBlind(bbSeat, DEMO_BIG_BLIND);
-    this.currentBet = DEMO_BIG_BLIND;
-    this.minRaise = DEMO_BIG_BLIND;
+    this.activeCount = playing.length;
+    this.dealerSeat = playing[(this.handNumber - 1) % playing.length].seat;
+
+    const sbSeat = this.nextDealtSeat(this.dealerSeat)!;
+    const bbSeat = this.nextDealtSeat(sbSeat)!;
+    this.postBlind(sbSeat, sb);
+    this.postBlind(bbSeat, bb);
+    this.currentBet = bb;
+    this.minRaise = bb;
     this.lastRaiserSeat = bbSeat;
 
-    for (const p of seated) {
+    for (const p of playing) {
       p.hasActed = p.seat !== bbSeat;
     }
     this.setCurrentTurnSeat(this.nextActiveTurnSeat(bbSeat)!);
     return { ok: true };
   }
 
-  /** Server-side timeout — auto-folds the acting player when the move timer expires */
+  private applyTimeBankCost(player: DemoPlayer): void {
+    if (!this.turnStartedAt) return;
+    player.timeBankMs = consumeTimeBank(this.turnStartedAt, player.timeBankMs);
+  }
+
+  /** Server-side timeout — auto-folds when action timer + time bank are exhausted */
   checkTurnTimeout(): boolean {
     if (!this.isBettingPhase() || !this.turnStartedAt) return false;
-    if (Date.now() - this.turnStartedAt < ACTION_TIMER_MS) return false;
 
     const player = this.playerAtSeat(this.currentTurnSeat);
     if (!player || player.status !== "active") return false;
+    if (Date.now() - this.turnStartedAt < ACTION_TIMER_MS + player.timeBankMs) {
+      return false;
+    }
 
+    player.timeBankMs = 0;
     player.status = "folded";
     player.hasActed = true;
     this.activeCount--;
@@ -270,6 +435,8 @@ export class DemoRoomEngine {
     }
     if (player.seat !== this.currentTurnSeat) return { ok: false, error: "Not your turn" };
     if (player.status !== "active") return { ok: false, error: "Cannot act" };
+
+    this.applyTimeBankCost(player);
 
     switch (action.type) {
       case "fold":
@@ -445,13 +612,23 @@ export class DemoRoomEngine {
     this.tryAdvanceStreet();
   }
 
+  private recordHandWin(winnerSessionIds: string[], pot: number): void {
+    this.lastHandWin = {
+      handNumber: this.handNumber,
+      winnerSessionIds,
+      pot,
+    };
+  }
+
   private awardSingleWinner(): void {
     const winner = [...this.players.values()].find(
       (p) => p.status === "active" || p.status === "allIn"
     );
     if (winner) {
-      winner.stack += this.pot;
-      this.statusMessage = `${winner.username} wins ${this.pot} play chips`;
+      const pot = this.pot;
+      winner.stack += pot;
+      this.recordHandWin([winner.sessionId], pot);
+      this.statusMessage = `${winner.username} wins ${pot} play chips`;
     }
     this.finishHand();
   }
@@ -468,8 +645,10 @@ export class DemoRoomEngine {
     }
 
     if (contenders.length === 1) {
-      contenders[0].stack += this.pot;
-      this.statusMessage = `${contenders[0].username} wins ${this.pot} play chips`;
+      const pot = this.pot;
+      contenders[0].stack += pot;
+      this.recordHandWin([contenders[0].sessionId], pot);
+      this.statusMessage = `${contenders[0].username} wins ${pot} play chips`;
       this.finishHand();
       return;
     }
@@ -488,14 +667,19 @@ export class DemoRoomEngine {
       }
     }
 
-    const share = Math.floor(this.pot / winners.length);
-    const remainder = this.pot % winners.length;
+    const pot = this.pot;
+    const share = Math.floor(pot / winners.length);
+    const remainder = pot % winners.length;
     winners.forEach((w, i) => {
       w.stack += share + (i === 0 ? remainder : 0);
     });
+    this.recordHandWin(
+      winners.map((w) => w.sessionId),
+      pot
+    );
     this.statusMessage =
       winners.length === 1
-        ? `${winners[0].username} wins ${this.pot} play chips`
+        ? `${winners[0].username} wins ${pot} play chips`
         : `Split pot — ${winners.map((w) => w.username).join(", ")}`;
     this.beginShowdown();
   }
@@ -528,6 +712,16 @@ export class DemoRoomEngine {
       p.status = "waiting";
       p.hasActed = false;
     }
+
+    const ready = this.readyToPlayPlayers();
+    if (ready.length >= 2) {
+      this.maybeScheduleAutoDeal();
+    } else {
+      this.statusMessage =
+        ready.length === 0
+          ? "Waiting for players…"
+          : "Need 2+ players — others can sit in or take a seat";
+    }
   }
 
   getView(forSessionId?: string): DemoRoomView {
@@ -549,6 +743,8 @@ export class DemoRoomEngine {
             : p.holeCards,
           status: p.status,
           hasActed: p.hasActed,
+          timeBankMs: p.timeBankMs,
+          sitOutNextHand: p.sitOutNextHand,
         };
       });
 
@@ -563,7 +759,7 @@ export class DemoRoomEngine {
       dealerSeat: this.dealerSeat,
       currentTurnSeat: this.currentTurnSeat,
       turnStartedAt: this.turnStartedAt,
-      buyIn: DEMO_BUY_IN,
+      buyIn: this.startStack,
       seats: [...this.seatToSession],
       players,
       spectators: [...this.spectators.values()].map((s) => ({
@@ -573,6 +769,8 @@ export class DemoRoomEngine {
       playerCount: this.players.size,
       statusMessage: this.statusMessage,
       handNumber: this.handNumber,
+      lastHandWin: this.lastHandWin,
+      autoDealAt: this.autoDealAt,
     };
   }
 
@@ -593,6 +791,10 @@ export class DemoRoomEngine {
       deckPos: this.deckPos,
       handNumber: this.handNumber,
       statusMessage: this.statusMessage,
+      lastHandWin: this.lastHandWin,
+      autoDealAt: this.autoDealAt,
+      roomId: this.roomId,
+      startStack: this.startStack,
       players: [...this.players.values()],
       spectators: [...this.spectators.values()],
       seatToSession: [...this.seatToSession],
@@ -616,14 +818,28 @@ export class DemoRoomEngine {
     this.deckPos = s.deckPos;
     this.handNumber = s.handNumber;
     this.statusMessage = s.statusMessage;
-    this.players = new Map(s.players.map((p) => [p.sessionId, p]));
+    this.lastHandWin = s.lastHandWin ?? null;
+    this.autoDealAt = s.autoDealAt ?? null;
+    this.players = new Map(
+      s.players.map((p) => [
+        p.sessionId,
+        {
+          ...p,
+          timeBankMs: p.timeBankMs ?? TIME_BANK_MS,
+          sitOutNextHand: p.sitOutNextHand ?? false,
+        },
+      ])
+    );
     this.spectators = new Map(s.spectators.map((x) => [x.sessionId, x]));
     this.seatToSession = [...s.seatToSession];
     this.stateListeners = new Set();
   }
 
   static fromSnapshot(s: DemoRoomSnapshot): DemoRoomEngine {
-    const room = new DemoRoomEngine();
+    const room = new DemoRoomEngine({
+      roomId: s.roomId,
+      startStack: s.startStack,
+    });
     room.restoreFromSnapshot(s);
     return room;
   }
@@ -645,6 +861,10 @@ export interface DemoRoomSnapshot {
   deckPos: number;
   handNumber: number;
   statusMessage: string | null;
+  lastHandWin: DemoHandWin | null;
+  autoDealAt: number | null;
+  roomId: string;
+  startStack: number;
   players: DemoPlayer[];
   spectators: DemoSpectator[];
   seatToSession: (string | null)[];

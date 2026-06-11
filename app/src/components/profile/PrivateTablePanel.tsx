@@ -5,10 +5,10 @@ import { usePrivy } from "@privy-io/react-auth";
 import Link from "next/link";
 import { PublicKey } from "@solana/web3.js";
 import {
-  formatWagerSol,
+  formatTokens,
   PRIVATE_TABLE_RAKE_PERCENT,
   PRIVATE_TABLES_ENABLED,
-  solToLamports,
+  TOKEN_DECIMALS,
   TOKEN_SYMBOL,
 } from "@/lib/constants";
 import GuestInfoBox from "@/components/ui/GuestInfoBox";
@@ -41,7 +41,7 @@ function PrivateTablesComingSoon() {
         </div>
         <div className="private-tables-soon-head">
           <span className="premium-coming-soon-badge">Coming soon</span>
-          <p className="private-tables-soon-title">Private tables · SOL</p>
+          <p className="private-tables-soon-title">Private tables · SOL (on-chain)</p>
           <p className="private-tables-soon-copy">
             Host invite-only games with real SOL buy-ins, direct invite links, and on-chain
             guest lists. Public cash games stay on {TOKEN_SYMBOL}.
@@ -104,7 +104,7 @@ function PrivateTablesComingSoon() {
 function PrivateTablesLive() {
   const { program, publicKey } = usePokerProgram();
   const { getAccessToken } = usePrivy();
-  const [buyIn, setBuyIn] = useState("0.1");
+  const [buyIn, setBuyIn] = useState("10000");
   const [tableName, setTableName] = useState("");
   const [inviteInput, setInviteInput] = useState("");
   const [selectedRoom, setSelectedRoom] = useState("");
@@ -151,11 +151,12 @@ function PrivateTablesLive() {
     setStatus("Creating private table on-chain…");
     try {
       const tableId = BigInt(Date.now());
-      const lamports = solToLamports(parseFloat(buyIn));
-      if (lamports < 10_000_000) {
-        throw new Error("Minimum buy-in is 0.01 SOL");
+      const human = parseFloat(buyIn);
+      const buyInRaw = Math.floor(human * 10 ** TOKEN_DECIMALS);
+      if (buyInRaw < 10_000 * 10 ** TOKEN_DECIMALS) {
+        throw new Error(`Minimum buy-in is 10K ${TOKEN_SYMBOL}`);
       }
-      await createPrivateTable(program, publicKey, lamports, tableId);
+      await createPrivateTable(program, publicKey, buyInRaw, tableId);
       const [room] = privateRoomPda(publicKey, tableId);
       const roomPubkey = room.toBase58();
 
@@ -166,7 +167,7 @@ function PrivateTablesLive() {
           roomPubkey,
           creatorWallet: publicKey.toBase58(),
           tableId: tableId.toString(),
-          buyInLamports: lamports.toString(),
+          buyInLamports: buyInRaw.toString(),
           name: tableName || undefined,
         }),
       });
@@ -266,11 +267,11 @@ function PrivateTablesLive() {
             />
           </label>
           <label className="private-tables-field private-tables-field--buyin">
-            <span>Buy-in (SOL)</span>
+            <span>Buy-in ({TOKEN_SYMBOL})</span>
             <input
               type="number"
-              step="0.01"
-              min="0.01"
+              step="1000"
+              min="10000"
               value={buyIn}
               onChange={(e) => setBuyIn(e.target.value)}
               className="profile-input"
@@ -297,7 +298,7 @@ function PrivateTablesLive() {
                 <div className="private-tables-item-main">
                   <p className="private-tables-item-name">{t.name ?? "Private table"}</p>
                   <p className="private-tables-item-meta">
-                    {formatWagerSol(Number(t.buyInLamports))}
+                    {formatTokens(Number(t.buyInLamports))} {TOKEN_SYMBOL}
                   </p>
                   <p className="private-tables-item-link" title={link}>
                     {link.replace(/^https?:\/\//, "")}

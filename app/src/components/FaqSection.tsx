@@ -131,9 +131,34 @@ const FAQ_ITEMS = [
     question: "Is poker actually on-chain?",
     answer: (
       <>
-        Yes. Buy-ins, pots, bets, and payouts are enforced by our Solana program.
-        Room state, stacks, and winners are settled on-chain. Chat and voice are
-        off-chain; money in the game is not.
+        <strong>Public cash games</strong> — yes for money: {TOKEN_SYMBOL} buy-ins sit in a
+        program vault; joins, actions, and cash-outs are Solana transactions you can
+        audit on Solscan. <strong>Demo and profile chip tables</strong> use server play
+        chips (not escrow). See{" "}
+        <a href="/fairness" className="text-violet-400 underline hover:text-violet-300">
+          Fairness & verification
+        </a>{" "}
+        for the full breakdown.
+      </>
+    ),
+  },
+  {
+    id: "provably-fair",
+    question: "Is the game provably fair?",
+    answer: (
+      <>
+        <p className="mb-2">
+          <strong>Escrow and payouts</strong> — verifiable on-chain for cash games (open
+          program, public account state, SPL vault).
+        </p>
+        <p className="mb-2">
+          <strong>Card dealing</strong> — not casino-grade yet: hole cards are on-chain
+          (readable before showdown) and shuffle uses a slot-based seed, not VRF. We
+          document this openly and are shipping VRF + commit–reveal.
+        </p>
+        <a href="/fairness" className="text-violet-400 underline hover:text-violet-300">
+          Read what you can verify today →
+        </a>
       </>
     ),
   },

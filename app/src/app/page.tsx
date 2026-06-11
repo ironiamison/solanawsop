@@ -15,7 +15,7 @@ import SocialDiscoverCard from "@/components/home/SocialDiscoverCard";
 import TestUsOutCard from "@/components/home/TestUsOutCard";
 import LoadingLobby from "@/components/loading/LoadingLobby";
 import { SectionTitle } from "@/components/home/lobby";
-import { SHOW_DEV_CONTROLS } from "@/lib/constants";
+import { SHOW_DEV_CONTROLS, TOKEN_SYMBOL } from "@/lib/constants";
 import { setupAllRooms } from "@/lib/program";
 import { usePokerProgram } from "@/hooks/usePokerProgram";
 import { useLobbyRooms } from "@/hooks/useLobbyRooms";
@@ -74,10 +74,10 @@ export default function Home() {
       {authenticated && program && publicKey && !tablesDeployed && (
         <div className="ui-alert ui-alert--amber mb-4">
           <p className="text-sm">
-            On-chain tables are not initialized on devnet yet.
+            On-chain {TOKEN_SYMBOL} tables are not initialized yet.
           </p>
           <p className="mt-1 text-xs opacity-80">
-            Connect your wallet and run one-time setup to create public cash game rooms.
+            After pump.fun launch, set NEXT_PUBLIC_SWSOP_MINT, connect wallet, and run one-time setup.
           </p>
           <button type="button" onClick={handleSetup} className="ui-btn ui-btn--primary ui-btn--sm mt-3">
             Initialize tables

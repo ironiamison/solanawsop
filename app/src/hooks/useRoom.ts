@@ -3,8 +3,24 @@
 import { useCallback, useEffect, useState } from "react";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { decodePlayer, decodeRoom, isEmptySeat } from "@/lib/decode";
+import { getCachedHoleCards } from "@/lib/fairness/events";
 import { playerPda, roomPda } from "@/lib/pdas";
 import { PlayerState, RoomState } from "@/lib/types";
+
+function applyHoleCardCache(
+  room: RoomState,
+  players: PlayerState[]
+): PlayerState[] {
+  const hand = room.handNumber ?? 0;
+  if (!hand || room.phase === "waiting") return players;
+  const roomKey = room.pubkey.toBase58();
+  return players.map((p) => {
+    if (p.holeRevealed && p.holeCards[0] !== 255) return p;
+    const cached = getCachedHoleCards(roomKey, hand, p.wallet.toBase58());
+    if (cached) return { ...p, holeCards: [...cached] };
+    return p;
+  });
+}
 
 async function loadRoom(
   connection: Connection,
@@ -25,9 +41,10 @@ async function loadRoom(
       })
   );
 
+  const players = playerAccounts.filter((p): p is PlayerState => p !== null);
   return {
     room: roomData,
-    players: playerAccounts.filter((p): p is PlayerState => p !== null),
+    players: applyHoleCardCache(roomData, players),
   };
 }
 

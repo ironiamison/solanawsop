@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePrivy } from "@privy-io/react-auth";
 import { BtnSecondary } from "@/components/home/lobby";
 import UserAvatar from "@/components/social/UserAvatar";
 import { REWARD_POINTS } from "@/lib/rewards";
@@ -28,6 +29,7 @@ export default function ProfileHero({
   linkingTwitter?: boolean;
   twitterLinkError?: string | null;
 }) {
+  const { logout } = usePrivy();
   const winRate =
     profile.handsPlayed && profile.handsPlayed > 0
       ? Math.round(((profile.handsWon ?? 0) / profile.handsPlayed) * 100)
@@ -81,6 +83,9 @@ export default function ProfileHero({
           <Link href="/leaderboard" className="profile-hero-link">
             Leaderboard →
           </Link>
+          <button type="button" onClick={logout} className="profile-hero-link">
+            Log out
+          </button>
         </div>
       </div>
 

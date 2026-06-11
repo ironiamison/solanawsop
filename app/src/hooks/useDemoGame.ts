@@ -353,6 +353,26 @@ export function useDemoGame() {
     await demoHttpPost("/api/demo/start-hand");
   }, [demoHttpPost]);
 
+  const setSitOut = useCallback(
+    async (sitOut: boolean) => {
+      const socket = socketRef.current;
+      if (socket?.connected && !httpModeRef.current) {
+        return new Promise<{ ok: boolean; error?: string }>((resolve) => {
+          socket.emit(
+            "demo-sit-out",
+            sitOut,
+            (res: { ok: boolean; error?: string }) => {
+              resolve(res ?? { ok: false });
+            }
+          );
+        });
+      }
+      const res = await demoHttpPost("/api/demo/sit-out", { sitOut });
+      return { ok: Boolean(res?.ok), error: res?.error };
+    },
+    [demoHttpPost]
+  );
+
   const sendAction = useCallback(
     async (action: DemoAction) => {
       setActionPending(true);
@@ -459,6 +479,7 @@ export function useDemoGame() {
     leaveSeat,
     takeSeat,
     startHand,
+    setSitOut,
     sendAction,
     sendMessage,
     leaveTable,

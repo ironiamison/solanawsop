@@ -20,7 +20,7 @@ export const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || undefined;
 /** Product brand */
 export const BRAND_NAME =
   process.env.NEXT_PUBLIC_BRAND_NAME ?? "SolanaWSOP";
-export const BRAND_TAGLINE = "On chain · real game";
+export const BRAND_TAGLINE = "On-chain escrow · open rules";
 export const BRAND_LOGO_SRC = "/assets/brand/solanawsop-logo.png";
 /** Transparent trim for demo / overlay surfaces */
 export const BRAND_LOGO_DEMO_SRC = "/assets/brand/solanawsop-logo-demo.png";
@@ -37,7 +37,7 @@ export const BRAND_WORDMARK_SRC = "/assets/brand/solanawsop-wordmark.png";
 
 /** In-game chip / token symbol */
 export const TOKEN_SYMBOL =
-  process.env.NEXT_PUBLIC_TOKEN_SYMBOL ?? "$WSOP";
+  process.env.NEXT_PUBLIC_TOKEN_SYMBOL ?? "$SWSOP";
 export const TOKEN_NAME =
   process.env.NEXT_PUBLIC_TOKEN_NAME ?? "SolanaWSOP";
 export const PUMP_FUN_URL =

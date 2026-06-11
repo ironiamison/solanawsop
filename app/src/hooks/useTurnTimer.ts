@@ -6,9 +6,15 @@ import {
   isTurnExpired,
   secondsRemaining,
   turnProgress,
+  turnTimerPhase,
+  type TurnTimerPhase,
 } from "@/lib/game/turnTimer";
 
-export function useTurnTimer(active: boolean, turnStartedAt?: number) {
+export function useTurnTimer(
+  active: boolean,
+  turnStartedAt?: number,
+  timeBankMs = 0
+) {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -18,11 +24,17 @@ export function useTurnTimer(active: boolean, turnStartedAt?: number) {
     return () => clearInterval(id);
   }, [active, turnStartedAt]);
 
+  const phase: TurnTimerPhase =
+    active && turnStartedAt ? turnTimerPhase(turnStartedAt, timeBankMs, now) : "action";
   const secondsLeft =
-    active && turnStartedAt ? secondsRemaining(turnStartedAt, now) : ACTION_TIMER_SECONDS;
-  const progress = active && turnStartedAt ? turnProgress(turnStartedAt, now) : 1;
-  const expired = active && turnStartedAt ? isTurnExpired(turnStartedAt, now) : false;
-  const urgent = active && secondsLeft <= 10;
+    active && turnStartedAt
+      ? secondsRemaining(turnStartedAt, timeBankMs, now)
+      : ACTION_TIMER_SECONDS;
+  const progress =
+    active && turnStartedAt ? turnProgress(turnStartedAt, timeBankMs, now) : 1;
+  const expired =
+    active && turnStartedAt ? isTurnExpired(turnStartedAt, timeBankMs, now) : false;
+  const urgent = active && (phase === "bank" || secondsLeft <= 3);
 
-  return { secondsLeft, progress, expired, urgent };
+  return { secondsLeft, progress, expired, urgent, phase };
 }

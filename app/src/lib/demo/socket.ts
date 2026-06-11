@@ -46,11 +46,11 @@ export function wireDemoBroadcast(io: Server): void {
   setInterval(() => {
     if (demoStoreUsesRedis()) {
       void withDemoRoom((room) => {
-        if (room.checkTurnTimeout()) broadcast(io, room);
+        if (room.tick()) broadcast(io, room);
       });
       return;
     }
-    if (demoRoom.checkTurnTimeout()) broadcast(io, demoRoom);
+    if (demoRoom.tick()) broadcast(io, demoRoom);
   }, 500);
 }
 
@@ -187,6 +187,23 @@ export function attachDemoHandlers(socket: Socket, io: Server): void {
       }
       ack?.({ ok: true, role: "player" });
       return { ok: true, role: "player" };
+    });
+  });
+
+  socket.on("demo-sit-out", (sitOut: boolean, ack?: (res: unknown) => void) => {
+    const sessionId = socket.data.demoSessionId as string | undefined;
+    if (!sessionId) {
+      ack?.({ ok: false, error: "Must be seated" });
+      return;
+    }
+    void runRoom(io, (room) => {
+      if (!room.findPlayer(sessionId)) {
+        ack?.({ ok: false, error: "Must be seated" });
+        return { ok: false, error: "Must be seated" };
+      }
+      const result = room.setSitOut(sessionId, sitOut);
+      ack?.(result);
+      return result;
     });
   });
 

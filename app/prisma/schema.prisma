@@ -90,6 +90,19 @@ model PrivateTableMeta {
   createdAt     DateTime @default(now())
 }
 
+/** Invite-only $SWSOP chip tables (off-chain, play-chip wager) */
+model WsopPrivateTable {
+  id             String   @id @default(cuid())
+  roomId         String   @unique
+  creatorWallet  String
+  buyInRaw       BigInt
+  name           String?
+  invitedWallets String   @default("[]")
+  createdAt      DateTime @default(now())
+
+  @@index([creatorWallet])
+}
+
 /** Singleton flywheel metrics (burns, OTC, creator rewards) */
 model FlywheelMetric {
   id                      String   @id @default("global")

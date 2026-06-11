@@ -17,25 +17,62 @@
       "args": []
     },
     {
+      "name": "configure_mint",
+      "discriminator": [194,40,217,137,179,23,131,160],
+      "accounts": [
+        { "name": "config", "writable": true },
+        { "name": "authority", "signer": true }
+      ],
+      "args": [{ "name": "mint", "type": "pubkey" }]
+    },
+    {
       "name": "initialize_room",
       "discriminator": [216,42,137,161,61,72,154,238],
       "accounts": [
         { "name": "config", "writable": true },
         { "name": "room", "writable": true },
         { "name": "vault" },
+        { "name": "mint" },
+        { "name": "vault_token_account", "writable": true },
         { "name": "authority", "writable": true, "signer": true },
+        { "name": "token_program" },
+        { "name": "associated_token_program" },
         { "name": "system_program" }
       ],
       "args": [{ "name": "tier_index", "type": "u8" }]
     },
     {
+      "name": "create_private_table",
+      "discriminator": [90,71,241,246,172,31,146,20],
+      "accounts": [
+        { "name": "config" },
+        { "name": "room", "writable": true },
+        { "name": "vault" },
+        { "name": "mint" },
+        { "name": "vault_token_account", "writable": true },
+        { "name": "creator", "writable": true, "signer": true },
+        { "name": "token_program" },
+        { "name": "associated_token_program" },
+        { "name": "system_program" }
+      ],
+      "args": [
+        { "name": "buy_in", "type": "u64" },
+        { "name": "table_id", "type": "u64" }
+      ]
+    },
+    {
       "name": "join_room",
       "discriminator": [95,232,188,81,124,130,78,139],
       "accounts": [
+        { "name": "config" },
         { "name": "room", "writable": true },
         { "name": "player", "writable": true },
         { "name": "player_wallet", "writable": true, "signer": true },
-        { "name": "vault", "writable": true },
+        { "name": "mint" },
+        { "name": "player_token_account", "writable": true },
+        { "name": "vault_token_account", "writable": true },
+        { "name": "vault" },
+        { "name": "token_program" },
         { "name": "system_program" }
       ],
       "args": []
@@ -47,16 +84,52 @@
         { "name": "room", "writable": true },
         { "name": "player", "writable": true },
         { "name": "player_wallet", "writable": true, "signer": true },
-        { "name": "vault", "writable": true }
+        { "name": "player_token_account", "writable": true },
+        { "name": "vault_token_account", "writable": true },
+        { "name": "vault" },
+        { "name": "token_program" }
       ],
       "args": []
+    },
+    {
+      "name": "commit_hand_entropy",
+      "discriminator": [35,34,67,189,136,197,243,73],
+      "accounts": [
+        { "name": "room", "writable": true },
+        { "name": "player", "writable": true },
+        { "name": "player_wallet", "signer": true }
+      ],
+      "args": [{ "name": "commitment", "type": { "array": ["u8", 32] } }]
     },
     {
       "name": "start_hand",
       "discriminator": [50,173,164,52,65,42,197,135],
       "accounts": [
         { "name": "room", "writable": true },
-        { "name": "starter", "signer": true }
+        { "name": "hand_state", "writable": true },
+        { "name": "slot_hashes" },
+        { "name": "starter", "writable": true, "signer": true },
+        { "name": "system_program" }
+      ],
+      "args": [{ "name": "next_hand", "type": "u64" }]
+    },
+    {
+      "name": "reveal_hole_cards",
+      "discriminator": [136,205,87,122,202,221,161,94],
+      "accounts": [
+        { "name": "room", "writable": true },
+        { "name": "hand_state" },
+        { "name": "player", "writable": true },
+        { "name": "player_wallet", "signer": true }
+      ],
+      "args": []
+    },
+    {
+      "name": "reveal_deck",
+      "discriminator": [151,106,151,10,124,70,251,44],
+      "accounts": [
+        { "name": "room", "writable": true },
+        { "name": "hand_state", "writable": true }
       ],
       "args": []
     },
@@ -67,9 +140,11 @@
         { "name": "room", "writable": true },
         { "name": "player", "writable": true },
         { "name": "player_wallet", "signer": true },
-        { "name": "vault", "writable": true },
         { "name": "config" },
-        { "name": "fee_recipient", "writable": true }
+        { "name": "vault_token_account", "writable": true },
+        { "name": "vault" },
+        { "name": "fee_recipient_token_account", "writable": true },
+        { "name": "token_program" }
       ],
       "args": [{ "name": "action", "type": { "defined": { "name": "PokerMove" } } }]
     },
@@ -78,9 +153,11 @@
       "discriminator": [32,130,217,150,106,172,250,30],
       "accounts": [
         { "name": "room", "writable": true },
-        { "name": "vault", "writable": true },
         { "name": "config" },
-        { "name": "fee_recipient", "writable": true }
+        { "name": "vault_token_account", "writable": true },
+        { "name": "vault" },
+        { "name": "fee_recipient_token_account", "writable": true },
+        { "name": "token_program" }
       ],
       "args": []
     }
@@ -97,6 +174,20 @@
     {
       "name": "Player",
       "discriminator": [205,222,112,7,165,155,206,218]
+    },
+    {
+      "name": "HandState",
+      "discriminator": [85,99,137,55,120,251,40,38]
+    }
+  ],
+  "events": [
+    {
+      "name": "HoleCardsDealt",
+      "discriminator": [158,42,222,239,146,184,53,79]
+    },
+    {
+      "name": "HandDealt",
+      "discriminator": [251,197,75,167,209,44,197,209]
     }
   ],
   "types": [
@@ -144,6 +235,7 @@
         "kind": "struct",
         "fields": [
           { "name": "authority", "type": "pubkey" },
+          { "name": "swsop_mint", "type": "pubkey" },
           { "name": "rooms_initialized", "type": "u8" },
           { "name": "bump", "type": "u8" }
         ]
@@ -171,7 +263,12 @@
           { "name": "deck_pos", "type": "u8" },
           { "name": "hand_number", "type": "u64" },
           { "name": "game_seed", "type": "u64" },
+          { "name": "vrf_seed", "type": { "array": ["u8", 32] } },
+          { "name": "deck_commitment", "type": { "array": ["u8", 32] } },
           { "name": "seats", "type": { "array": ["pubkey", 6] } },
+          { "name": "is_private", "type": "bool" },
+          { "name": "creator", "type": "pubkey" },
+          { "name": "invited", "type": { "array": ["pubkey", 6] } },
           { "name": "bump", "type": "u8" },
           { "name": "vault_bump", "type": "u8" }
         ]
@@ -189,9 +286,52 @@
           { "name": "round_bet", "type": "u64" },
           { "name": "total_bet", "type": "u64" },
           { "name": "hole_cards", "type": { "array": ["u8", 2] } },
+          { "name": "hole_commitments", "type": { "array": [{ "array": ["u8", 32] }, 2] } },
+          { "name": "hole_revealed", "type": "bool" },
+          { "name": "entropy_commitment", "type": { "array": ["u8", 32] } },
           { "name": "status", "type": { "defined": { "name": "PlayerStatus" } } },
           { "name": "has_acted", "type": "bool" },
           { "name": "bump", "type": "u8" }
+        ]
+      }
+    },
+    {
+      "name": "HandState",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          { "name": "room", "type": "pubkey" },
+          { "name": "hand_number", "type": "u64" },
+          { "name": "vrf_seed", "type": { "array": ["u8", 32] } },
+          { "name": "deck_commitment", "type": { "array": ["u8", 32] } },
+          { "name": "deck", "type": { "array": ["u8", 52] } },
+          { "name": "deck_pos", "type": "u8" },
+          { "name": "hole_by_seat", "type": { "array": [{ "array": ["u8", 2] }, 6] } },
+          { "name": "deck_revealed", "type": "bool" },
+          { "name": "bump", "type": "u8" }
+        ]
+      }
+    },
+    {
+      "name": "HoleCardsDealt",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          { "name": "wallet", "type": "pubkey" },
+          { "name": "card_0", "type": "u8" },
+          { "name": "card_1", "type": "u8" }
+        ]
+      }
+    },
+    {
+      "name": "HandDealt",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          { "name": "room", "type": "pubkey" },
+          { "name": "hand_number", "type": "u64" },
+          { "name": "deck_commitment", "type": { "array": ["u8", 32] } },
+          { "name": "vrf_seed", "type": { "array": ["u8", 32] } }
         ]
       }
     }

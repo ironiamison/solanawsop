@@ -1,6 +1,6 @@
 /** Visual seat positions around the table (hero rotated to bottom). */
 export const SEAT_COORDS = [
-  { left: "50%", top: "100%", transform: "translate(-50%, calc(-100% - 6px))" },
+  { left: "50%", bottom: "0.5%", top: "auto", transform: "translateX(-50%)" },
   { left: "11%", top: "81%", transform: "translate(-50%, -50%)" },
   { left: "0%", top: "50%", transform: "translate(-6%, -50%)" },
   { left: "50%", top: "0%", transform: "translate(-50%, 6px)" },

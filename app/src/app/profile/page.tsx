@@ -15,6 +15,9 @@ import ProfileHero from "@/components/profile/ProfileHero";
 import ProfileSection from "@/components/profile/ProfileSection";
 import ProfileTabs, { type ProfileTab } from "@/components/profile/ProfileTabs";
 import PrivateTablePanel from "@/components/profile/PrivateTablePanel";
+import WsopPrivateTablePanel from "@/components/profile/WsopPrivateTablePanel";
+import BotPracticePanel from "@/components/profile/BotPracticePanel";
+import { TOKEN_SYMBOL } from "@/lib/constants";
 import { useAuthFetch } from "@/hooks/useAuthFetch";
 import { usePrivyProfile } from "@/hooks/usePrivyProfile";
 import { useSocialCounts } from "@/hooks/useSocialCounts";
@@ -152,7 +155,12 @@ function ProfileContent() {
               <QuickLink
                 href="/profile?tab=tables"
                 label="Private tables"
-                hint="SOL · Coming soon"
+                hint={`SOL + ${TOKEN_SYMBOL}`}
+              />
+              <QuickLink
+                href="/profile/practice"
+                label="Test your strategy"
+                hint="Play vs bots"
               />
               <QuickLink
                 href="/profile?tab=invites"
@@ -180,12 +188,26 @@ function ProfileContent() {
       )}
 
       {tab === "tables" && (
-        <ProfileSection
-          title="Private tables"
-          subtitle="Invite-only SOL games — coming soon"
-        >
-          <PrivateTablePanel />
-        </ProfileSection>
+        <div className="profile-tables-stack flex flex-col gap-8">
+          <ProfileSection
+            title="Private tables · SOL"
+            subtitle="On-chain invite-only games with real SOL buy-ins"
+          >
+            <PrivateTablePanel />
+          </ProfileSection>
+          <ProfileSection
+            title={`Private tables · ${TOKEN_SYMBOL}`}
+            subtitle="Invite-only token tables — live now with play chips"
+          >
+            <WsopPrivateTablePanel />
+          </ProfileSection>
+          <ProfileSection
+            title="Test your strategy"
+            subtitle="Profile-only bot table — sharpen your game in private"
+          >
+            <BotPracticePanel />
+          </ProfileSection>
+        </div>
       )}
 
       {tab === "rewards" && (

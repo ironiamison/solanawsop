@@ -75,7 +75,11 @@ export default function LoginButton({
         : "Connected";
 
   if (variant === "dashboard") {
-    return null;
+    return (
+      <button type="button" onClick={logout} className="wallet-disconnect-btn">
+        Log out
+      </button>
+    );
   }
 
   return (
@@ -83,7 +87,7 @@ export default function LoginButton({
       <span className="wallet-connected-dot" aria-hidden />
       <span className="wallet-connected-label">{connectedLabel}</span>
       <button type="button" onClick={logout} className="wallet-disconnect-btn">
-        Disconnect
+        Log out
       </button>
     </div>
   );

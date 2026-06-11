@@ -55,6 +55,19 @@ export function demoNameOverrides(view: DemoRoomView): Record<string, string> {
   return map;
 }
 
+export function demoSittingOutOverrides(
+  view: DemoRoomView
+): Record<string, boolean> {
+  const map: Record<string, boolean> = {};
+  if (view.phase !== "waiting") return map;
+  for (const p of view.players) {
+    if (p.sitOutNextHand) {
+      map[sessionToPubkey(p.sessionId).toBase58()] = true;
+    }
+  }
+  return map;
+}
+
 export function demoAvatarOverrides(view: DemoRoomView): Record<string, string> {
   const map: Record<string, string> = {};
   for (const p of view.players) {

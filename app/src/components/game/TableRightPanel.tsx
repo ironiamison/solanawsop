@@ -76,26 +76,18 @@ export default function TableRightPanel({
           </>
         ) : (
           <>
-            <p className="text-[9px] font-bold uppercase tracking-wider text-zinc-600">Hand</p>
-            <p className="mb-1 font-mono text-[10px] text-zinc-300">
-              #{roomPubkey.slice(0, 7)}
+            <p className="text-[9px] leading-relaxed text-zinc-500">
+              Street tracker for the current hand. Escrow & tx links are in the Verify panel above.
             </p>
-            {lastTxSig ? (
+            {lastTxSig && (
               <a
                 href={explorerTxUrl(lastTxSig)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[10px] font-semibold text-violet-400 hover:underline"
+                className="mt-2 inline-block text-[10px] font-semibold text-violet-400 hover:underline"
               >
                 View tx →
               </a>
-            ) : (
-              <p className="flex items-center gap-1.5 text-[10px] text-emerald-400">
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                Verified on Solana
-              </p>
             )}
           </>
         )}

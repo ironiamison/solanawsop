@@ -19,6 +19,10 @@ export interface DemoPlayer {
   holeCards: [number, number];
   status: PlayerStatus;
   hasActed: boolean;
+  /** Milliseconds of time bank left for this table session */
+  timeBankMs: number;
+  /** Skip the next hand but keep the seat */
+  sitOutNextHand: boolean;
 }
 
 export interface DemoPlayerView {
@@ -31,6 +35,14 @@ export interface DemoPlayerView {
   holeCards: [number, number];
   status: PlayerStatus;
   hasActed: boolean;
+  timeBankMs: number;
+  sitOutNextHand: boolean;
+}
+
+export interface DemoHandWin {
+  handNumber: number;
+  winnerSessionIds: string[];
+  pot: number;
 }
 
 export interface DemoRoomView {
@@ -51,6 +63,9 @@ export interface DemoRoomView {
   statusMessage: string | null;
   handNumber: number;
   turnStartedAt: number;
+  lastHandWin: DemoHandWin | null;
+  /** Unix ms when the next hand auto-starts (null if not scheduled) */
+  autoDealAt: number | null;
 }
 
 export type DemoAction =

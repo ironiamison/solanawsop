@@ -2,16 +2,21 @@ const RANKS = ["2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K", "A"];
 const SUITS = ["♠", "♥", "♦", "♣"];
 const SUIT_COLORS = ["text-slate-100", "text-red-400", "text-red-400", "text-slate-100"];
 
+/** Poker shorthand T → readable 10 on the felt. */
+function rankDisplay(rank: string): string {
+  return rank === "T" ? "10" : rank;
+}
+
 export function cardLabel(card: number): string {
   if (card >= 52 || card === 255) return "?";
   const rank = card % 13;
   const suit = Math.floor(card / 13);
-  return `${RANKS[rank]}${SUITS[suit]}`;
+  return `${rankDisplay(RANKS[rank])}${SUITS[suit]}`;
 }
 
 export function cardRank(card: number): string {
   if (card >= 52 || card === 255) return "?";
-  return RANKS[card % 13];
+  return rankDisplay(RANKS[card % 13]);
 }
 
 export function cardSuit(card: number): string {

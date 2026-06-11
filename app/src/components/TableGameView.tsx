@@ -6,6 +6,7 @@ import { PublicKey } from "@solana/web3.js";
 import PokerTable from "./PokerTable";
 import GameplayLayout from "./game/GameplayLayout";
 import TableRightPanel from "./game/TableRightPanel";
+import TableVerificationCard from "./game/TableVerificationCard";
 import TableChatDock from "./game/TableChatDock";
 import ActionPanel from "./game/ActionPanel";
 import TableControls, { TableControlBtn } from "./game/TableControls";
@@ -14,12 +15,18 @@ import TableNotFoundView from "@/components/table/TableNotFoundView";
 import PrivateTableJoinBanner, {
   isWalletInvited,
 } from "@/components/table/PrivateTableJoinBanner";
-import { BRAND_NAME, BUY_IN_TIERS, formatSolCompact, formatTokens, TOKEN_SYMBOL } from "@/lib/constants";
+import { BRAND_NAME, BUY_IN_TIERS, formatTokens, TOKEN_SYMBOL } from "@/lib/constants";
+import { fetchTokenBalance, getSwspMint } from "@/lib/swsop-token";
 import LoginButton from "@/components/LoginButton";
+import {
+  cacheHoleCards,
+  parseHoleCardsDealt,
+} from "@/lib/fairness/events";
 import {
   joinRoomByPubkey,
   leaveRoomByPubkey,
   playerActionByRoom,
+  revealHoleCardsByRoom,
   startHandByRoom,
 } from "@/lib/program";
 import {
@@ -38,16 +45,10 @@ interface Props {
   roomPubkey: string;
 }
 
-function formatBlinds(buyIn: number, sol = false): string {
+function formatBlinds(buyIn: number): string {
   const bb = buyIn;
   const sb = Math.floor(bb / 2);
-  if (sol) return `${formatSolCompact(sb)} / ${formatSolCompact(bb)}`;
-  const fmt = (n: number) => {
-    if (n >= 1_000_000) return `${n / 1_000_000}M`;
-    if (n >= 1_000) return `${n / 1_000}K`;
-    return String(n);
-  };
-  return `${fmt(sb)} / ${fmt(bb)}`;
+  return `${formatTokens(sb)} / ${formatTokens(bb)}`;
 }
 
 export default function TableGameView({ roomPubkey }: Props) {
@@ -63,6 +64,7 @@ export default function TableGameView({ roomPubkey }: Props) {
   const [status, setStatus] = useState<string | null>(null);
   const [lastTxSig, setLastTxSig] = useState<string | null>(null);
   const [privateTableName, setPrivateTableName] = useState<string | null>(null);
+  const [walletTokenBalance, setWalletTokenBalance] = useState<bigint | null>(null);
   const [localTurnStartedAt, setLocalTurnStartedAt] = useState<number | undefined>();
   const prevTurnKey = useRef("");
   const autoFoldSent = useRef(false);
@@ -102,10 +104,17 @@ export default function TableGameView({ roomPubkey }: Props) {
   const invited = room ? isWalletInvited(room.invited, publicKey) : false;
   const canJoinPrivate = !room?.isPrivate || isCreator || invited;
 
-  const isPrivateTable = !!room?.isPrivate;
-  const formatAmount = isPrivateTable
-    ? (n: number) => formatSolCompact(n)
-    : (n: number) => formatTokens(n);
+  const formatAmount = (n: number) => formatTokens(n);
+
+  useEffect(() => {
+    if (!connection || !publicKey || !getSwspMint()) {
+      setWalletTokenBalance(null);
+      return;
+    }
+    fetchTokenBalance(connection, publicKey)
+      .then(setWalletTokenBalance)
+      .catch(() => setWalletTokenBalance(null));
+  }, [connection, publicKey, myPlayer?.stack, room?.phase]);
 
   const tierLabel = room?.isPrivate
     ? privateTableName ?? "Private table"
@@ -113,12 +122,22 @@ export default function TableGameView({ roomPubkey }: Props) {
       ? BUY_IN_TIERS[room.tierIndex]?.label ?? `${TOKEN_SYMBOL} table`
       : TOKEN_SYMBOL;
 
+  const lastBetTurnKey = useRef("");
+
   useEffect(() => {
-    if (!myPlayer || !room) return;
+    if (!myPlayer || !room || !isMyTurn) return;
+    const turnKey = `${room.phase}-${room.currentTurnSeat}-${localTurnStartedAt ?? room.turnStartedAt}`;
+    if (turnKey === lastBetTurnKey.current) return;
+    lastBetTurnKey.current = turnKey;
+
     const minRaise = room.minRaise || room.buyIn / 100;
-    const defaultBet = Math.max(room.currentBet + minRaise, callAmount + minRaise);
-    setBetAmount(Math.min(defaultBet, myPlayer.stack));
-  }, [myPlayer, room, callAmount, isMyTurn]);
+    const maxRaiseTo = myPlayer.roundBet + myPlayer.stack;
+    const minRaiseTo =
+      room.currentBet === 0
+        ? Math.min(maxRaiseTo, minRaise)
+        : Math.min(maxRaiseTo, room.currentBet + minRaise);
+    setBetAmount(minRaiseTo);
+  }, [myPlayer, room, isMyTurn, localTurnStartedAt]);
 
   useEffect(() => {
     if (!room || room.phase === "waiting" || room.phase === "showdown") {
@@ -171,17 +190,51 @@ export default function TableGameView({ roomPubkey }: Props) {
   );
 
   const roomPk = new PublicKey(roomPubkey);
+  const activeHand = room?.handNumber ?? 1;
 
-  const handleJoin = () =>
+  const handleJoin = () => {
+    if (!room) return;
+    const buyIn = BigInt(room.buyIn);
+    if (walletTokenBalance !== null && walletTokenBalance < buyIn) {
+      setStatus(
+        `Need ${formatTokens(buyIn)} ${TOKEN_SYMBOL} in wallet — you have ${formatTokens(walletTokenBalance)}`
+      );
+      return;
+    }
     runTx("Join", () => joinRoomByPubkey(program!, publicKey!, roomPk));
+  };
 
   const handleLeave = () =>
     runTx("Leave", () => leaveRoomByPubkey(program!, publicKey!, roomPk));
 
-  const handleStartHand = () =>
-    runTx("Deal", () =>
-      startHandByRoom(program!, publicKey!, roomPk, getPlayerPubkeys(players))
-    );
+  const handleStartHand = () => {
+    if (!room || !connection) return;
+    const nextHand = (room.handNumber ?? 0) + 1;
+    runTx("Deal", async () => {
+      const sig = await startHandByRoom(
+        program!,
+        publicKey!,
+        roomPk,
+        getPlayerPubkeys(players),
+        nextHand
+      );
+      const dealt = await parseHoleCardsDealt(connection, sig);
+      for (const ev of dealt) {
+        cacheHoleCards(roomPubkey, nextHand, ev.wallet.toBase58(), [
+          ev.card0,
+          ev.card1,
+        ]);
+      }
+      if (publicKey && dealt.some((e) => e.wallet.equals(publicKey))) {
+        try {
+          await revealHoleCardsByRoom(program!, publicKey, roomPk, nextHand);
+        } catch {
+          // event cache still shows hero cards locally
+        }
+      }
+      return sig;
+    });
+  };
 
   const handleAction = (action: Parameters<typeof playerActionByRoom>[3]) =>
     runTx("Action", () =>
@@ -190,13 +243,22 @@ export default function TableGameView({ roomPubkey }: Props) {
         publicKey!,
         roomPk,
         action,
-        getPlayerPubkeys(players)
+        getPlayerPubkeys(players),
+        activeHand
       )
     );
 
+  const maxRaiseTo = (myPlayer?.roundBet ?? 0) + (myPlayer?.stack ?? 0);
+  const minRaiseTo = room
+    ? room.currentBet === 0
+      ? Math.min(maxRaiseTo, room.minRaise || 1000)
+      : Math.min(maxRaiseTo, room.currentBet + (room.minRaise || 1000))
+    : 0;
+  const clampedBet = Math.min(maxRaiseTo, Math.max(minRaiseTo, betAmount));
+
   const handleRaise = () => {
     if (!room) return;
-    const raiseIncrement = betAmount - room.currentBet;
+    const raiseIncrement = clampedBet - room.currentBet;
     if (raiseIncrement < room.minRaise) return;
     handleAction({ raise: { amount: new BN(raiseIncrement) } });
   };
@@ -220,7 +282,8 @@ export default function TableGameView({ roomPubkey }: Props) {
         publicKey,
         roomPk,
         { fold: {} },
-        getPlayerPubkeys(players)
+        getPlayerPubkeys(players),
+        activeHand
       )
     );
   }, [expired, isMyTurn, myPlayer, txPending, program, publicKey, runTx, players, roomPk]);
@@ -244,8 +307,8 @@ export default function TableGameView({ roomPubkey }: Props) {
   return (
     <GameplayLayout
       tableTitle={`${BRAND_NAME} · ${tierLabel}`}
-      blindsLabel={formatBlinds(room.buyIn, isPrivateTable)}
-      buyInLabel={isPrivateTable ? formatSolCompact(room.buyIn) : `${tierLabel} ${TOKEN_SYMBOL}`}
+      blindsLabel={`${formatBlinds(room.buyIn)} ${TOKEN_SYMBOL}`}
+      buyInLabel={`${formatTokens(room.buyIn)} ${TOKEN_SYMBOL}`}
       playerCount={room.playerCount}
       userLabel={
         profile.twitterHandle
@@ -267,6 +330,22 @@ export default function TableGameView({ roomPubkey }: Props) {
             <div className="mx-4 mt-2 flex items-center justify-between gap-3 rounded-lg border border-violet-500/25 bg-violet-500/10 px-4 py-3">
               <p className="text-xs text-violet-100">Connect your wallet to take a seat at {BRAND_NAME}</p>
               <LoginButton />
+            </div>
+          )}
+          {authenticated && !getSwspMint() && (
+            <div className="mx-4 mt-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-xs text-amber-100">
+              Set <code className="text-amber-50">NEXT_PUBLIC_SWSOP_MINT</code> to your pump.fun token mint to enable real {TOKEN_SYMBOL} escrow.
+            </div>
+          )}
+          {authenticated && walletTokenBalance !== null && !myPlayer && (
+            <div className="mx-4 mt-2 text-center text-[11px] text-zinc-500">
+              Wallet: {formatTokens(walletTokenBalance)} {TOKEN_SYMBOL}
+              {room && (
+                <span className="text-zinc-600">
+                  {" "}
+                  · buy-in {formatTokens(room.buyIn)} {TOKEN_SYMBOL}
+                </span>
+              )}
             </div>
           )}
           {status && (
@@ -316,6 +395,7 @@ export default function TableGameView({ roomPubkey }: Props) {
           players={players}
           myWallet={publicKey ?? undefined}
           formatAmount={formatAmount}
+          fairnessMode="onchain-cash"
         />
       }
       actionBar={
@@ -329,9 +409,10 @@ export default function TableGameView({ roomPubkey }: Props) {
           callAmount={callAmount}
           pot={room.pot}
           stack={myPlayer?.stack ?? 0}
+          roundBet={myPlayer?.roundBet ?? 0}
           minRaise={room.minRaise || 1000}
           currentBet={room.currentBet}
-          betAmount={betAmount}
+          betAmount={clampedBet}
           onBetAmountChange={setBetAmount}
           formatAmount={formatAmount}
           onFold={() => handleAction({ fold: {} })}
@@ -362,12 +443,20 @@ export default function TableGameView({ roomPubkey }: Props) {
         ) : undefined
       }
       rightPanel={
-        <TableRightPanel
-          phase={room.phase}
-          roomPubkey={roomPubkey}
-          lastTxSig={lastTxSig}
-          playerCount={room.playerCount}
-        />
+        <>
+          <TableVerificationCard
+            room={room}
+            roomPubkey={roomPubkey}
+            lastTxSig={lastTxSig}
+          />
+          <TableRightPanel
+            phase={room.phase}
+            roomPubkey={roomPubkey}
+            lastTxSig={lastTxSig}
+            playerCount={room.playerCount}
+            variant="live"
+          />
+        </>
       }
     />
   );

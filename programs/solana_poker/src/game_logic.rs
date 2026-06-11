@@ -2,6 +2,8 @@ use crate::errors::PokerError;
 use crate::hand_eval::{evaluate_hand, HandRank};
 use crate::state::*;
 use anchor_lang::prelude::*;
+use anchor_lang::solana_program::hash::{hash, hashv};
+use anchor_lang::solana_program::sysvar::slot_hashes::SlotHashes;
 
 pub fn init_deck() -> [u8; 52] {
     let mut deck = [0u8; 52];
@@ -20,6 +22,73 @@ pub fn shuffle_deck(deck: &mut [u8; 52], seed: u64, slot: u64) {
         let j = (state % (i as u64 + 1)) as usize;
         deck.swap(i, j);
     }
+}
+
+/// VRF-style seed from SlotHashes sysvar + room + hand + optional player entropy commits.
+pub fn vrf_seed_from_slot_hashes(
+    slot_hashes: &SlotHashes,
+    room: &Pubkey,
+    hand_number: u64,
+    buy_in: u64,
+    entropy: &[[u8; 32]],
+) -> [u8; 32] {
+    let hand_bytes = hand_number.to_le_bytes();
+    let buy_in_bytes = buy_in.to_le_bytes();
+    let mut blob: Vec<u8> = Vec::new();
+    blob.extend_from_slice(room.as_ref());
+    blob.extend_from_slice(&hand_bytes);
+    blob.extend_from_slice(&buy_in_bytes);
+    for e in entropy {
+        if *e != [0u8; 32] {
+            blob.extend_from_slice(e);
+        }
+    }
+    for (slot, entry_hash) in slot_hashes.iter().take(12) {
+        blob.extend_from_slice(&slot.to_le_bytes());
+        blob.extend_from_slice(entry_hash.as_ref());
+    }
+    hash(&blob).to_bytes()
+}
+
+pub fn game_seed_from_vrf(vrf_seed: &[u8; 32]) -> u64 {
+    u64::from_le_bytes(vrf_seed[0..8].try_into().unwrap())
+}
+
+pub fn deck_commitment(deck: &[u8; 52], vrf_seed: &[u8; 32]) -> [u8; 32] {
+    let deck_hash = hash(deck);
+    hashv(&[deck_hash.as_ref(), vrf_seed.as_ref()]).to_bytes()
+}
+
+pub fn hole_card_salt(vrf_seed: &[u8; 32], seat: u8, card_index: u8) -> u64 {
+    let h = hashv(&[vrf_seed.as_ref(), &[seat], &[card_index]]);
+    u64::from_le_bytes(h.to_bytes()[0..8].try_into().unwrap())
+}
+
+pub fn hole_card_commitment(
+    card: u8,
+    salt: u64,
+    wallet: &Pubkey,
+    hand_number: u64,
+) -> [u8; 32] {
+    let salt_bytes = salt.to_le_bytes();
+    let hand_bytes = hand_number.to_le_bytes();
+    hashv(&[&[card], &salt_bytes, wallet.as_ref(), &hand_bytes]).to_bytes()
+}
+
+pub fn verify_hole_commitments(
+    cards: [u8; HOLE_CARDS],
+    salts: [u64; HOLE_CARDS],
+    commitments: [[u8; 32]; HOLE_CARDS],
+    wallet: &Pubkey,
+    hand_number: u64,
+) -> bool {
+    for i in 0..HOLE_CARDS {
+        let expected = hole_card_commitment(cards[i], salts[i], wallet, hand_number);
+        if expected != commitments[i] {
+            return false;
+        }
+    }
+    true
 }
 
 pub fn reset_round_flags(players: &mut [Account<Player>]) -> Result<()> {
@@ -153,6 +222,62 @@ pub fn advance_phase(room: &mut Room, players: &mut [Account<Player>]) -> Result
 pub struct PotResult {
     pub winner_wallet: Pubkey,
     pub amount: u64,
+}
+
+pub fn resolve_showdown_with_holes(
+    room: &Room,
+    players: &[Player],
+    hole_by_seat: &[[u8; HOLE_CARDS]; MAX_PLAYERS],
+    pot: u64,
+) -> Result<Vec<PotResult>> {
+    let community: Vec<u8> = room.community_cards[..room.community_count as usize].to_vec();
+
+    let contenders: Vec<&Player> = players
+        .iter()
+        .filter(|p| p.status == PlayerStatus::Active || p.status == PlayerStatus::AllIn)
+        .collect();
+
+    if contenders.is_empty() {
+        return err!(PokerError::NoActivePlayers);
+    }
+
+    if contenders.len() == 1 {
+        return Ok(vec![PotResult {
+            winner_wallet: contenders[0].wallet,
+            amount: pot,
+        }]);
+    }
+
+    let mut best_rank = HandRank::new(0, [0; 5]);
+    let mut winners: Vec<Pubkey> = Vec::new();
+
+    for p in &contenders {
+        let holes = hole_by_seat[p.seat as usize];
+        let rank = evaluate_hand(holes, &community);
+        if rank > best_rank {
+            best_rank = rank;
+            winners.clear();
+            winners.push(p.wallet);
+        } else if rank == best_rank {
+            winners.push(p.wallet);
+        }
+    }
+
+    let share = pot / winners.len() as u64;
+    let remainder = pot % winners.len() as u64;
+
+    let mut results = Vec::new();
+    for (i, w) in winners.iter().enumerate() {
+        let mut amount = share;
+        if i == 0 {
+            amount += remainder;
+        }
+        results.push(PotResult {
+            winner_wallet: *w,
+            amount,
+        });
+    }
+    Ok(results)
 }
 
 pub fn resolve_showdown(room: &Room, players: &[Account<Player>]) -> Result<Vec<PotResult>> {

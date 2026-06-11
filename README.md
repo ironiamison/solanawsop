@@ -1,6 +1,6 @@
 # SolanaWSOP
 
-On-chain Texas Hold'em on Solana. **Public cash games** wager the project token (`$WSOP`). **Private tables** (coming soon) use **SOL** with a 10% platform rake per pot.
+On-chain Texas Hold'em on Solana. **Public cash games** use `$SWSOP` play chips (off-chain engine; wallet for identity). **SOL private tables** (optional) use on-chain vault escrow with a 10% platform rake per pot.
 
 ## Architecture
 
@@ -56,7 +56,7 @@ Open [http://localhost:3000](http://localhost:3000).
 | Mode | Wager | Status |
 |------|-------|--------|
 | Demo table | Play chips | Live |
-| Public cash games | `$WSOP` (on-chain) | Live |
+| Public cash games | `$SWSOP` play chips | Live (UI); on-chain SOL tiers legacy |
 | Private tables | SOL + 10% rake | Set `NEXT_PUBLIC_PRIVATE_TABLES_ENABLED=true` after deploy |
 
 ## Features
@@ -88,11 +88,21 @@ anchor test   # from repo root, requires build toolchain
 cd app && npm run build
 ```
 
+## Fairness & verification
+
+See **[FAIRNESS.md](./FAIRNESS.md)** for what is verifiable on-chain (SPL escrow, payouts, txs) vs what is not yet (VRF shuffle, hidden hole cards). In-app: [/fairness](http://localhost:3001/fairness) and the **Verify on-chain** panel at cash tables.
+
+| Verifiable today | Not yet |
+|------------------|---------|
+| SPL buy-in / cash-out in program vault | VRF card shuffle |
+| Bet/payout rules in open-source program | Commit–reveal hole cards |
+| Room/player state & tx history on Solscan | Trustless demo/chip tables |
+
 ## Security
 
-- Hole cards on-chain are visible to sophisticated readers — use commit-reveal for mainnet.
-- Slot-based shuffle is devnet-grade; use VRF for production.
-- Audit before mainnet.
+- Hole cards on-chain are visible to sophisticated readers — commit–reveal on roadmap.
+- Slot-based shuffle is devnet-grade; VRF planned before mainnet casino-grade claims.
+- Third-party audit required before mainnet.
 
 ## License
 

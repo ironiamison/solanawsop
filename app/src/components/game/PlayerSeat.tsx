@@ -58,6 +58,7 @@ export default function PlayerSeat({
   isMucking = false,
   isShowdownReveal = false,
   showdownRevealDelay = 0,
+  sittingOut = false,
   formatAmount = formatTokens,
 }: {
   wallet: PublicKey;
@@ -82,6 +83,7 @@ export default function PlayerSeat({
   isMucking?: boolean;
   isShowdownReveal?: boolean;
   showdownRevealDelay?: number;
+  sittingOut?: boolean;
   formatAmount?: (n: number) => string;
 }) {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -121,11 +123,82 @@ export default function PlayerSeat({
   const seatFoldedClass =
     folded && !isMucking ? "premium-seat-folded" : isMucking ? "premium-seat-mucking" : "";
 
+  const holeCards = showCards ? (
+    <div
+      className={`${isMe ? "mb-1" : "mt-2"} flex flex-col items-center ${isMe ? "premium-hero-hand" : ""}${isMucking ? " premium-hand-muck" : ""}`}
+    >
+      <div className="flex gap-1">
+        {isDealing && inHand && !isMucking ? (
+          [0, 1].map((i) => (
+            <div
+              key={`deal-${dealHandId}-${i}`}
+              className="premium-card-anim-wrap premium-card-deal-in"
+              style={{
+                animationDelay: `${holeCardDealDelay(seatIndex, dealerSeat, i)}ms`,
+              }}
+            >
+              <PlayingCard
+                card={0}
+                hidden
+                small={!isMe}
+                hero={isMe}
+                fan={isMe ? (i === 0 ? "left" : "right") : "none"}
+              />
+            </div>
+          ))
+        ) : showHoleCards && player.holeCards[0] < 52 ? (
+          player.holeCards.map((c, i) => (
+            <div
+              key={`${dealHandId}-${i}`}
+              className={`premium-card-anim-wrap${
+                isShowdownReveal && !isMe
+                  ? " premium-card-showdown-reveal"
+                  : isMe && dealHandId > 0 && !isShowdownReveal
+                    ? " premium-card-flip-reveal"
+                    : ""
+              }`}
+              style={
+                isShowdownReveal && !isMe
+                  ? { animationDelay: `${showdownRevealDelay + i * 140}ms` }
+                  : isMe && dealHandId > 0 && !isShowdownReveal
+                    ? { animationDelay: `${i * 110}ms` }
+                    : undefined
+              }
+            >
+              <PlayingCard
+                card={c}
+                small={!isMe}
+                hero={isMe}
+                fan={isMe ? (i === 0 ? "left" : "right") : "none"}
+              />
+            </div>
+          ))
+        ) : (
+          <>
+            <div className={isMucking ? "premium-card-anim-wrap premium-card-muck" : ""}>
+              <PlayingCard card={0} hidden small={!isMe} hero={isMe} fan={isMe ? "left" : "none"} />
+            </div>
+            <div
+              className={isMucking ? "premium-card-anim-wrap premium-card-muck" : ""}
+              style={isMucking ? { animationDelay: "80ms" } : undefined}
+            >
+              <PlayingCard card={0} hidden small={!isMe} hero={isMe} fan={isMe ? "right" : "none"} />
+            </div>
+          </>
+        )}
+      </div>
+      {isMe && handLabel && (
+        <span className="premium-hand-rank mt-2">{handLabel}</span>
+      )}
+    </div>
+  ) : null;
+
   return (
     <div
       className={`premium-seat absolute z-20 ${seatFoldedClass} ${isMe ? "premium-seat-hero" : ""}`}
       style={seatStyle}
     >
+      {sittingOut && <span className="premium-sitout-badge">Sit out</span>}
       {isMucking && <span className="premium-fold-badge">Fold</span>}
       {isTurn && (
         <span className="premium-turn-action-badge">
@@ -135,6 +208,7 @@ export default function PlayerSeat({
           )}
         </span>
       )}
+      {isMe && holeCards}
       <div
         className={`premium-seat-inner flex items-center gap-2${isTurn ? " premium-seat-turn-active" : ""}${turnEnter ? " premium-seat-turn-enter" : ""}`}
       >
@@ -188,75 +262,7 @@ export default function PlayerSeat({
         </div>
       )}
 
-      {showCards && (
-        <div
-          className={`mt-2 flex flex-col items-center ${isMe ? "premium-hero-hand" : ""}${isMucking ? " premium-hand-muck" : ""}`}
-        >
-          <div className="flex gap-1">
-            {isDealing && inHand && !isMucking ? (
-              [0, 1].map((i) => (
-                <div
-                  key={`deal-${dealHandId}-${i}`}
-                  className="premium-card-anim-wrap premium-card-deal-in"
-                  style={{
-                    animationDelay: `${holeCardDealDelay(seatIndex, dealerSeat, i)}ms`,
-                  }}
-                >
-                  <PlayingCard
-                    card={0}
-                    hidden
-                    small={!isMe}
-                    hero={isMe}
-                    fan={isMe ? (i === 0 ? "left" : "right") : "none"}
-                  />
-                </div>
-              ))
-            ) : showHoleCards && player.holeCards[0] < 52 ? (
-              player.holeCards.map((c, i) => (
-                <div
-                  key={`${dealHandId}-${i}`}
-                  className={`premium-card-anim-wrap${
-                    isShowdownReveal && !isMe
-                      ? " premium-card-showdown-reveal"
-                      : isMe && dealHandId > 0 && !isShowdownReveal
-                        ? " premium-card-flip-reveal"
-                        : ""
-                  }`}
-                  style={
-                    isShowdownReveal && !isMe
-                      ? { animationDelay: `${showdownRevealDelay + i * 140}ms` }
-                      : isMe && dealHandId > 0 && !isShowdownReveal
-                        ? { animationDelay: `${i * 110}ms` }
-                        : undefined
-                  }
-                >
-                  <PlayingCard
-                    card={c}
-                    small={!isMe}
-                    hero={isMe}
-                    fan={isMe ? (i === 0 ? "left" : "right") : "none"}
-                  />
-                </div>
-              ))
-            ) : (
-              <>
-                <div className={isMucking ? "premium-card-anim-wrap premium-card-muck" : ""}>
-                  <PlayingCard card={0} hidden small={!isMe} hero={isMe} fan={isMe ? "left" : "none"} />
-                </div>
-                <div
-                  className={isMucking ? "premium-card-anim-wrap premium-card-muck" : ""}
-                  style={isMucking ? { animationDelay: "80ms" } : undefined}
-                >
-                  <PlayingCard card={0} hidden small={!isMe} hero={isMe} fan={isMe ? "right" : "none"} />
-                </div>
-              </>
-            )}
-          </div>
-          {isMe && handLabel && (
-            <span className="premium-hand-rank mt-2">{handLabel}</span>
-          )}
-        </div>
-      )}
+      {!isMe && holeCards}
     </div>
   );
 }

@@ -34,8 +34,12 @@ pub enum PokerError {
     NoActivePlayers,
     #[msg("Raise must be at least the minimum raise")]
     RaiseTooSmall,
-    #[msg("Buy-in amount must be at least 0.01 SOL")]
+    #[msg("Buy-in amount must be at least 10K $SWSOP")]
     BuyInTooLow,
+    #[msg("$SWSOP mint not configured — call configure_mint first")]
+    MintNotConfigured,
+    #[msg("Token mint does not match program config")]
+    InvalidMint,
     #[msg("Maximum 6 players per room")]
     TooManyPlayers,
     #[msg("Not invited to this private table")]
@@ -48,4 +52,12 @@ pub enum PokerError {
     AlreadyInvited,
     #[msg("Cannot invite yourself")]
     CannotInviteSelf,
+    #[msg("Hole card reveal invalid")]
+    InvalidReveal,
+    #[msg("Deck already revealed")]
+    DeckAlreadyRevealed,
+    #[msg("Deck commitment mismatch")]
+    DeckCommitmentMismatch,
+    #[msg("Hand state mismatch")]
+    InvalidHandState,
 }

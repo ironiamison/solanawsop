@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePrivy } from "@privy-io/react-auth";
 import BrandChipMark from "@/components/brand/BrandChipMark";
 import { SOLANA_NETWORK } from "@/lib/constants";
 
@@ -21,6 +22,8 @@ export default function GameTableTopBar({
   userLabel: string;
   userAvatar?: string;
 }) {
+  const { authenticated, logout } = usePrivy();
+
   return (
     <header className="opoker-topbar flex h-[52px] shrink-0 items-center gap-3 border-b border-white/[0.06] px-3 sm:px-4">
       <Link href="/" className="opoker-topbar-logo shrink-0" aria-label="Back to lobby">
@@ -80,6 +83,16 @@ export default function GameTableTopBar({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
           </svg>
         </Link>
+        {authenticated && (
+          <button
+            type="button"
+            onClick={logout}
+            className="opoker-icon-btn hidden text-[10px] font-semibold uppercase tracking-wide text-zinc-400 sm:flex sm:h-auto sm:w-auto sm:px-2.5 sm:py-1.5"
+            title="Log out"
+          >
+            Log out
+          </button>
+        )}
       </div>
     </header>
   );

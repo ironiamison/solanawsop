@@ -14,6 +14,7 @@ import {
   handleDemoLobby,
   handleDemoChatList,
   handleDemoChatSend,
+  handleDemoSitOut,
   handleDemoStartHand,
   handleDemoState,
   handleDemoTakeSeat,
@@ -134,6 +135,16 @@ async function handleDemoHttp(
     if (pathname === "/api/demo/take-seat" && req.method === "POST") {
       const body = await readJson<{ sessionId?: string }>(req);
       const result = await handleDemoTakeSeat(body.sessionId ?? "");
+      sendJson(res, result.status, result, origin);
+      return;
+    }
+
+    if (pathname === "/api/demo/sit-out" && req.method === "POST") {
+      const body = await readJson<{ sessionId?: string; sitOut?: boolean }>(req);
+      const result = await handleDemoSitOut(
+        body.sessionId ?? "",
+        Boolean(body.sitOut)
+      );
       sendJson(res, result.status, result, origin);
       return;
     }

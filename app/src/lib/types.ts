@@ -27,6 +27,16 @@ export interface RoomState {
   isPrivate: boolean;
   creator: PublicKey;
   invited: PublicKey[];
+  /** On-chain hand index (0 between hands) */
+  handNumber?: number;
+  /** Deterministic shuffle seed written at deal */
+  gameSeed?: bigint;
+  /** SlotHashes-derived VRF seed (32 bytes) */
+  vrfSeed?: Uint8Array;
+  /** SHA-256 commitment to shuffled deck + vrf seed */
+  deckCommitment?: Uint8Array;
+  /** Full deck order on-chain (revealed at showdown) */
+  deck?: number[];
   /** Unix ms when the current player's turn began (demo server; client-estimated on-chain) */
   turnStartedAt?: number;
 }
@@ -40,6 +50,7 @@ export interface PlayerState {
   roundBet: number;
   totalBet: number;
   holeCards: number[];
+  holeRevealed?: boolean;
   status: PlayerStatus;
   hasActed: boolean;
 }
