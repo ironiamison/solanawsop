@@ -9,13 +9,13 @@ import {
 } from "@/lib/rewards";
 
 export async function POST(req: Request) {
+  const privyUser = await verifyPrivyToken(req.headers.get("authorization"));
+  if (!privyUser) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     await ensureDatabase();
-
-    const privyUser = await verifyPrivyToken(req.headers.get("authorization"));
-    if (!privyUser) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
 
     const body = await req.json().catch(() => ({}));
     const walletFromClient = (body as { walletAddress?: string }).walletAddress;
