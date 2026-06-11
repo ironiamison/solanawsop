@@ -6573,12 +6573,14 @@ html:has(.lobby-shell) {
   position: relative;
   overflow: hidden;
   border-radius: 0.75rem;
+  min-height: clamp(17rem, 38vw, 22rem);
   background: #06040c;
 }
 
 .gs-panel-bg {
   object-fit: cover;
-  object-position: center 38%;
+  object-position: center 40%;
+  filter: brightness(1.1) saturate(1.1);
 }
 
 .gs-panel-vignette {
@@ -6587,14 +6589,18 @@ html:has(.lobby-shell) {
   z-index: 0;
   pointer-events: none;
   background:
-    linear-gradient(180deg, rgba(6, 4, 12, 0.55) 0%, rgba(6, 4, 12, 0.2) 42%, rgba(6, 4, 12, 0.82) 100%),
-    linear-gradient(90deg, rgba(6, 4, 12, 0.5) 0%, transparent 45%, rgba(6, 4, 12, 0.35) 100%);
+    linear-gradient(180deg, rgba(6, 4, 12, 0.35) 0%, rgba(6, 4, 12, 0.08) 38%, rgba(6, 4, 12, 0.72) 100%),
+    linear-gradient(90deg, rgba(6, 4, 12, 0.45) 0%, transparent 42%, rgba(6, 4, 12, 0.25) 100%);
 }
 
 .gs-panel-inner {
   position: relative;
   z-index: 1;
-  padding: 1.5rem 1.5rem 1.35rem;
+  display: flex;
+  min-height: inherit;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 1.35rem 1.35rem 1.25rem;
 }
 
 .gs-header {
@@ -6614,11 +6620,12 @@ html:has(.lobby-shell) {
 .gs-heading {
   margin-top: 0.35rem;
   font-family: var(--font-instrument-serif), Georgia, serif;
-  font-size: clamp(1.5rem, 3vw, 1.85rem);
+  font-size: clamp(1.65rem, 3.2vw, 2rem);
   font-weight: 400;
   letter-spacing: -0.02em;
   color: #fafafa;
   line-height: 1.1;
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.65);
 }
 
 .gs-sub {
@@ -6698,9 +6705,9 @@ html:has(.lobby-shell) {
   align-items: flex-start;
   text-align: left;
   border-radius: 0.5rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(8, 6, 14, 0.88);
-  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(8, 6, 14, 0.92);
+  backdrop-filter: blur(10px);
   padding: 1.1rem 1.1rem 1rem;
   transition: border-color 0.15s ease, background 0.15s ease;
   cursor: pointer;
