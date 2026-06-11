@@ -4,6 +4,8 @@ import { PrivyProvider } from "@privy-io/react-auth";
 import { toSolanaWalletConnectors } from "@privy-io/react-auth/solana";
 import { createSolanaRpc, createSolanaRpcSubscriptions } from "@solana/kit";
 import ProfileBootstrap from "@/components/ProfileBootstrap";
+import { TwitterLinkProvider } from "@/components/TwitterLinkProvider";
+import { APP_URL } from "@/lib/constants";
 
 const rpcUrl =
   process.env.NEXT_PUBLIC_RPC_URL || "https://api.devnet.solana.com";
@@ -42,6 +44,8 @@ export default function AppPrivyProvider({
           showWalletLoginFirst: true,
         },
         loginMethods: ["wallet", "twitter", "email", "google"],
+        customOAuthRedirectUrl: APP_URL,
+        allowOAuthInEmbeddedBrowsers: true,
         legal: {
           termsAndConditionsUrl: "/terms",
           privacyPolicyUrl: "/privacy",
@@ -72,8 +76,10 @@ export default function AppPrivyProvider({
         },
       }}
     >
-      <ProfileBootstrap />
-      {children}
+      <TwitterLinkProvider>
+        <ProfileBootstrap />
+        {children}
+      </TwitterLinkProvider>
     </PrivyProvider>
   );
 }
