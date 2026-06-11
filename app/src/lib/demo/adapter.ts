@@ -1,15 +1,17 @@
 import { PublicKey } from "@solana/web3.js";
 import { playerAvatarUrl } from "@/lib/avatars";
 import type { PlayerState, RoomState } from "@/lib/types";
+import { DEMO_MAX_PLAYERS } from "./constants";
 import { sessionToPubkey } from "./ids";
 import type { DemoRoomView } from "./types";
 
 const DEMO_ROOM_PUBKEY = sessionToPubkey("demo-room-anchor");
 
 export function demoViewToRoom(view: DemoRoomView): RoomState {
-  const seats = view.seats.map((sid) =>
-    sid ? sessionToPubkey(sid) : PublicKey.default
-  );
+  const seats = Array.from({ length: DEMO_MAX_PLAYERS }, (_, i) => {
+    const sid = view.seats[i] ?? null;
+    return sid ? sessionToPubkey(sid) : PublicKey.default;
+  });
 
   return {
     pubkey: DEMO_ROOM_PUBKEY,

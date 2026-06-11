@@ -8,7 +8,8 @@ export async function POST(req: Request) {
   const body = await req.json();
   const result = await handleDemoAction(
     (body.sessionId as string) || "",
-    body.action as DemoAction | undefined
+    body.action as DemoAction | undefined,
+    body.roomId as string | undefined
   );
   return NextResponse.json(result, { status: result.status });
 }

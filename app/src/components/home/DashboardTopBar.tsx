@@ -6,7 +6,7 @@ import LoginButton from "@/components/LoginButton";
 import DashboardNavBar from "@/components/nav/DashboardNavBar";
 import { usePrivyProfile } from "@/hooks/usePrivyProfile";
 import { usePokerProgram } from "@/hooks/usePokerProgram";
-import { SOLANA_NETWORK } from "@/lib/constants";
+import { SHOW_NETWORK_BADGE, SOLANA_NETWORK } from "@/lib/constants";
 import { LiveDot } from "./lobby";
 
 export default function DashboardTopBar() {
@@ -17,10 +17,12 @@ export default function DashboardTopBar() {
     <header className="dash-topbar">
       <div className="dash-topbar-left">
         <BrandHeaderLogo className="topbar-brand-lockup shrink-0" priority />
-        <div className="dash-topbar-network ui-pill ui-pill--live hidden xl:flex">
-          <LiveDot />
-          <span className="capitalize">{SOLANA_NETWORK}</span>
-        </div>
+        {SHOW_NETWORK_BADGE && (
+          <div className="dash-topbar-network ui-pill ui-pill--live hidden xl:flex">
+            <LiveDot />
+            <span className="capitalize">{SOLANA_NETWORK}</span>
+          </div>
+        )}
       </div>
 
       <DashboardNavBar />

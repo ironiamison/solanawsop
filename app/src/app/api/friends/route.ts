@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { ensureDatabase } from "@/lib/db-init";
 import { findUserByHandleOrWallet, publicUserSelect } from "@/lib/social";
 import { requireDbUser } from "@/lib/require-user";
 
 export async function GET(req: Request) {
+  await ensureDatabase();
   const me = await requireDbUser(req.headers.get("authorization"));
   if (!me) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -53,6 +55,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  await ensureDatabase();
   const me = await requireDbUser(req.headers.get("authorization"));
   if (!me) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -93,6 +96,7 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
+  await ensureDatabase();
   const me = await requireDbUser(req.headers.get("authorization"));
   if (!me) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

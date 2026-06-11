@@ -7,18 +7,41 @@ import {
   pickBotAction,
 } from "./bot-ai";
 
+/** Drop bots that lost their seat after reconcile. */
+function pruneOrphanBots(room: DemoRoomEngine): void {
+  const view = room.getView();
+  for (const p of view.players) {
+    if (!isBotSession(p.sessionId)) continue;
+    if (view.seats[p.seat] !== p.sessionId) {
+      room.removePlayer(p.sessionId);
+    }
+  }
+}
+
 export function ensurePracticeBots(room: DemoRoomEngine): void {
   if (room.phase !== "waiting") return;
-  const hasHuman = room.getView().players.some(
-    (p) => !isBotSession(p.sessionId)
-  );
-  if (!hasHuman) return;
 
+  room.repairLobbyState();
+
+  const view = room.getView();
+  const hasHuman = view.players.some((p) => !isBotSession(p.sessionId));
+  if (!hasHuman) {
+    for (const p of view.players) {
+      if (isBotSession(p.sessionId)) room.removePlayer(p.sessionId);
+    }
+    return;
+  }
+
+  pruneOrphanBots(room);
+
+  const seats = room.getView().seats;
   for (let seat = 0; seat < DEMO_MAX_PLAYERS; seat++) {
-    const occupied = room.getView().players.some((p) => p.seat === seat);
-    if (occupied) continue;
+    if (seats[seat]) continue;
     room.addBotPlayer(seat, botSessionId(seat), botDisplayName(seat));
   }
+
+  room.reconcileSeats();
+  room.scheduleAutoDealIfReady();
 }
 
 export function processBotTurns(room: DemoRoomEngine, max = 12): boolean {

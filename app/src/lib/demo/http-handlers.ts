@@ -1,30 +1,54 @@
 import { appendDemoChat, listDemoChat } from "@/lib/demo/chat-store";
 import type { DemoRoomEngine } from "@/lib/demo/engine";
+import { withChipRoom } from "@/lib/chip-room/store";
 import { newSessionId, validateUsername } from "@/lib/demo/ids";
-import { withDemoRoom } from "@/lib/demo/store";
+import {
+  findDemoRoomForSession,
+  listDemoTables,
+  lobbyStatsFrom,
+  normalizeDemoRoomId,
+  registerDemoRoom,
+  resolveDemoRoomForJoin,
+  resolveDemoRoomId,
+} from "@/lib/demo/lobby-registry";
 import type { DemoAction } from "@/lib/demo/types";
 
-export function lobbyStatsFrom(room: DemoRoomEngine) {
-  const view = room.getView();
-  return {
-    playerCount: view.playerCount,
-    spectators: view.spectators.length,
-    isFull: room.isFull(),
-    maxPlayers: 6,
-  };
+export { lobbyStatsFrom };
+
+function withDemoRoomId<T>(
+  roomId: string,
+  fn: (room: DemoRoomEngine) => T | Promise<T>
+): Promise<T> {
+  const id = normalizeDemoRoomId(roomId);
+  return withChipRoom(id, async (room) => {
+    await registerDemoRoom(id);
+    return fn(room);
+  });
 }
 
 export async function handleDemoLobby() {
-  return withDemoRoom((room) => lobbyStatsFrom(room));
+  const tables = await listDemoTables();
+  return { tables };
 }
 
-export async function handleDemoState(sessionId?: string) {
-  return withDemoRoom((room) => {
+export async function handleDemoState(
+  sessionId: string | undefined,
+  roomId?: string
+) {
+  const id = await resolveDemoRoomId(sessionId, roomId);
+  if (sessionId && !roomId) {
+    const found = await findDemoRoomForSession(sessionId);
+    if (!found) {
+      return { ok: false as const, error: "Session not found", status: 404 };
+    }
+  }
+  return withDemoRoomId(id, (room) => {
     if (sessionId && !room.hasSession(sessionId)) {
       return { ok: false as const, error: "Session not found", status: 404 };
     }
     return {
       ok: true as const,
+      roomId: id,
       state: room.getView(sessionId),
       lobby: lobbyStatsFrom(room),
       status: 200,
@@ -36,10 +60,19 @@ export async function handleDemoJoin(body: {
   username?: string;
   preferPlayer?: boolean;
   sessionId?: string;
+  roomId?: string;
 }) {
-  return withDemoRoom((room) => {
+  const preferPlayer = body.preferPlayer !== false;
+  let targetRoomId: string;
+  if (!preferPlayer && body.roomId) {
+    targetRoomId = normalizeDemoRoomId(body.roomId);
+    await registerDemoRoom(targetRoomId);
+  } else {
+    targetRoomId = await resolveDemoRoomForJoin(body.roomId);
+  }
+
+  return withDemoRoomId(targetRoomId, (room) => {
     const username = validateUsername((body.username as string) ?? "");
-    const preferPlayer = body.preferPlayer !== false;
     const existingSession = body.sessionId || undefined;
 
     if (!username) {
@@ -51,13 +84,28 @@ export async function handleDemoJoin(body: {
     }
 
     const sessionId = existingSession || newSessionId();
-    if (room.usernameTaken(username, sessionId)) {
-      return { ok: false as const, error: "Username already taken", status: 409 };
-    }
-
     const placeholderSocket = `http-${sessionId}`;
     let role: "player" | "spectator" = "spectator";
     let notice: string | undefined;
+
+    const reclaimed = room.reclaimSeatForUsername(sessionId, username);
+    if (reclaimed) {
+      room.rebindSocket(sessionId, placeholderSocket);
+      return {
+        ok: true as const,
+        sessionId,
+        roomId: room.roomId,
+        role: reclaimed,
+        notice: "Reconnected to your seat",
+        lobby: lobbyStatsFrom(room),
+        state: room.getView(sessionId),
+        status: 200,
+      };
+    }
+
+    if (room.usernameTaken(username, sessionId)) {
+      return { ok: false as const, error: "Username already taken", status: 409 };
+    }
 
     if (preferPlayer && !room.isFull()) {
       const result = room.joinAsPlayer(sessionId, username, placeholderSocket);
@@ -76,6 +124,7 @@ export async function handleDemoJoin(body: {
     return {
       ok: true as const,
       sessionId,
+      roomId: room.roomId,
       role,
       notice,
       lobby: lobbyStatsFrom(room),
@@ -87,9 +136,11 @@ export async function handleDemoJoin(body: {
 
 export async function handleDemoAction(
   sessionId: string,
-  action: DemoAction | undefined
+  action: DemoAction | undefined,
+  roomId?: string
 ) {
-  return withDemoRoom((room) => {
+  const id = await resolveDemoRoomId(sessionId, roomId);
+  return withDemoRoomId(id, (room) => {
     if (!sessionId || !room.hasSession(sessionId)) {
       return { ok: false as const, error: "Not in demo", status: 400 };
     }
@@ -99,6 +150,7 @@ export async function handleDemoAction(
     const result = room.playerAction(sessionId, action);
     return {
       ...result,
+      roomId: room.roomId,
       state: room.getView(sessionId),
       lobby: lobbyStatsFrom(room),
       status: result.ok ? 200 : 400,
@@ -106,8 +158,9 @@ export async function handleDemoAction(
   });
 }
 
-export async function handleDemoLeaveSeat(sessionId: string) {
-  return withDemoRoom((room) => {
+export async function handleDemoLeaveSeat(sessionId: string, roomId?: string) {
+  const id = await resolveDemoRoomId(sessionId, roomId);
+  return withDemoRoomId(id, (room) => {
     if (!sessionId || !room.hasSession(sessionId)) {
       return { ok: false as const, error: "Not in demo", status: 400 };
     }
@@ -121,6 +174,7 @@ export async function handleDemoLeaveSeat(sessionId: string) {
     return {
       ok: true as const,
       role: "spectator" as const,
+      roomId: room.roomId,
       state: room.getView(sessionId),
       lobby: lobbyStatsFrom(room),
       status: 200,
@@ -128,8 +182,9 @@ export async function handleDemoLeaveSeat(sessionId: string) {
   });
 }
 
-export async function handleDemoTakeSeat(sessionId: string) {
-  return withDemoRoom((room) => {
+export async function handleDemoTakeSeat(sessionId: string, roomId?: string) {
+  const id = await resolveDemoRoomId(sessionId, roomId);
+  return withDemoRoomId(id, (room) => {
     if (!sessionId || !room.hasSession(sessionId)) {
       return { ok: false as const, error: "Not in demo", status: 400 };
     }
@@ -143,6 +198,7 @@ export async function handleDemoTakeSeat(sessionId: string) {
     return {
       ok: true as const,
       role: "player" as const,
+      roomId: room.roomId,
       state: room.getView(sessionId),
       lobby: lobbyStatsFrom(room),
       status: 200,
@@ -150,8 +206,13 @@ export async function handleDemoTakeSeat(sessionId: string) {
   });
 }
 
-export async function handleDemoSitOut(sessionId: string, sitOut: boolean) {
-  return withDemoRoom((room) => {
+export async function handleDemoSitOut(
+  sessionId: string,
+  sitOut: boolean,
+  roomId?: string
+) {
+  const id = await resolveDemoRoomId(sessionId, roomId);
+  return withDemoRoomId(id, (room) => {
     if (!sessionId || !room.findPlayer(sessionId)) {
       return { ok: false as const, error: "Must be seated", status: 400 };
     }
@@ -159,6 +220,7 @@ export async function handleDemoSitOut(sessionId: string, sitOut: boolean) {
     return {
       ...result,
       sitOut,
+      roomId: room.roomId,
       state: room.getView(sessionId),
       lobby: lobbyStatsFrom(room),
       status: result.ok ? 200 : 400,
@@ -166,14 +228,16 @@ export async function handleDemoSitOut(sessionId: string, sitOut: boolean) {
   });
 }
 
-export async function handleDemoStartHand(sessionId: string) {
-  return withDemoRoom((room) => {
+export async function handleDemoStartHand(sessionId: string, roomId?: string) {
+  const id = await resolveDemoRoomId(sessionId, roomId);
+  return withDemoRoomId(id, (room) => {
     if (!sessionId || !room.findPlayer(sessionId)) {
       return { ok: false as const, error: "Must be seated", status: 400 };
     }
     const result = room.startHand(sessionId);
     return {
       ...result,
+      roomId: room.roomId,
       state: room.getView(sessionId),
       lobby: lobbyStatsFrom(room),
       status: result.ok ? 200 : 400,
@@ -188,11 +252,13 @@ export async function handleDemoChatList(since = 0) {
 
 export async function handleDemoChatSend(body: {
   sessionId?: string;
+  roomId?: string;
   text?: string;
   displayName?: string;
   avatar?: string;
 }) {
   const sessionId = body.sessionId ?? "";
+  const roomId = normalizeDemoRoomId(body.roomId);
   const text = (body.text ?? "").trim();
   const displayName = (body.displayName ?? "").trim();
 
@@ -200,12 +266,13 @@ export async function handleDemoChatSend(body: {
     return { ok: false as const, error: "Invalid message", status: 400 };
   }
 
-  const inRoom = await withDemoRoom((room) => room.hasSession(sessionId));
+  const inRoom = await withDemoRoomId(roomId, (room) => room.hasSession(sessionId));
   if (!inRoom) {
     return { ok: false as const, error: "Not in demo", status: 400 };
   }
 
   const message = await appendDemoChat({
+    roomId,
     wallet: sessionId,
     displayName,
     avatar: body.avatar,

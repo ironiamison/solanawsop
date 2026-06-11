@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useLinkTwitter } from "@/hooks/useLinkTwitter";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -54,7 +54,7 @@ function ProfileContent() {
     }
   }, [tabParam]);
 
-  useEffect(() => {
+  const loadDbProfile = useCallback(() => {
     if (!authenticated) return;
     authFetch("/api/profile")
       .then((r) => r.json())
@@ -63,8 +63,26 @@ function ProfileContent() {
           setDbProfile(d.user);
           if (d.user.bio) setBio(d.user.bio);
         }
-      });
-  }, [authenticated, authFetch, tab]);
+      })
+      .catch(() => {});
+  }, [authenticated, authFetch]);
+
+  useEffect(() => {
+    loadDbProfile();
+  }, [loadDbProfile, tab, twitterHandle]);
+
+  useEffect(() => {
+    const onSynced = (e: Event) => {
+      const detail = (e as CustomEvent<{ user?: typeof dbProfile }>).detail;
+      if (detail?.user) {
+        setDbProfile(detail.user);
+      } else {
+        loadDbProfile();
+      }
+    };
+    window.addEventListener("wsop-profile-synced", onSynced);
+    return () => window.removeEventListener("wsop-profile-synced", onSynced);
+  }, [loadDbProfile]);
 
   const saveBio = async () => {
     setStatus("Saving…");

@@ -3,17 +3,23 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Socket } from "socket.io-client";
 import { createAppSocket } from "@/lib/socket-client";
-import { demoApiUrl } from "@/lib/demo-api";
+import { demoHttpApiUrl, postDemoJson } from "@/lib/demo-api";
 import { SOCKET_URL } from "@/lib/constants";
 import { DEMO_ROOM_ID } from "@/lib/demo/constants";
-import { DEMO_SESSION_STORAGE_KEY, validateUsername } from "@/lib/demo/ids";
-import type { DemoAction, DemoRole, DemoRoomView } from "@/lib/demo/types";
+import {
+  DEMO_ROOM_STORAGE_KEY,
+  DEMO_SESSION_STORAGE_KEY,
+  DEMO_USERNAME_STORAGE_KEY,
+  validateUsername,
+} from "@/lib/demo/ids";
+import type { DemoAction, DemoRole, DemoRoomView, DemoTableInfo } from "@/lib/demo/types";
 import type { ChatMessage } from "@/hooks/useSocket";
 import type { DemoLobbyStats } from "@/components/demo/DemoJoinScreen";
 
 type JoinResult = {
   ok: boolean;
   sessionId?: string;
+  roomId?: string;
   role?: DemoRole;
   error?: string;
   notice?: string;
@@ -32,7 +38,8 @@ function applyViewRole(
   sid: string,
   setView: (v: DemoRoomView) => void,
   setRole: (r: DemoRole) => void,
-  setLobbyStats: (s: DemoLobbyStats) => void
+  setLobbyStats: (s: DemoLobbyStats) => void,
+  setUsername?: (name: string) => void
 ) {
   setView(state);
   setLobbyStats({
@@ -41,19 +48,47 @@ function applyViewRole(
     isFull: state.playerCount >= 6,
     maxPlayers: 6,
   });
-  if (state.players.some((p) => p.sessionId === sid)) setRole("player");
-  else if (state.spectators.some((s) => s.sessionId === sid)) setRole("spectator");
+  const seated = state.players.find((p) => p.sessionId === sid);
+  const watching = state.spectators.find((s) => s.sessionId === sid);
+  if (seated) {
+    setRole("player");
+    setUsername?.(seated.username);
+    try {
+      localStorage.setItem(DEMO_USERNAME_STORAGE_KEY, seated.username);
+    } catch {
+      // ignore
+    }
+  } else if (watching) {
+    setRole("spectator");
+    setUsername?.(watching.username);
+    try {
+      localStorage.setItem(DEMO_USERNAME_STORAGE_KEY, watching.username);
+    } catch {
+      // ignore
+    }
+  }
+}
+
+function lobbyFromTable(table: DemoTableInfo): DemoLobbyStats {
+  return {
+    playerCount: table.playerCount,
+    spectators: table.spectators,
+    isFull: table.isFull,
+    maxPlayers: table.maxPlayers,
+  };
 }
 
 export function useDemoGame() {
   const socketRef = useRef<Socket | null>(null);
   const sessionIdRef = useRef<string | null>(null);
+  const roomIdRef = useRef<string>(DEMO_ROOM_ID);
   const lastChatTsRef = useRef(0);
   const httpModeRef = useRef(!SOCKET_URL);
   const [socketLive, setSocketLive] = useState(false);
   const [serverReady, setServerReady] = useState(false);
   const [view, setView] = useState<DemoRoomView | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [roomId, setRoomId] = useState<string>(DEMO_ROOM_ID);
   const [role, setRole] = useState<DemoRole | null>(null);
   const [username, setUsername] = useState("");
   const [joinError, setJoinError] = useState<string | null>(null);
@@ -62,32 +97,61 @@ export function useDemoGame() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [actionPending, setActionPending] = useState(false);
   const [lobbyStats, setLobbyStats] = useState<DemoLobbyStats>(DEFAULT_LOBBY);
+  const [tables, setTables] = useState<DemoTableInfo[]>([]);
+  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
+  const [seatDesync, setSeatDesync] = useState(false);
+  const reclaimAttemptedRef = useRef(false);
+
+  const applyTables = useCallback((next: DemoTableInfo[]) => {
+    setTables(next);
+    const pick =
+      selectedRoomId ??
+      next.find((t) => !t.isFull)?.roomId ??
+      next[0]?.roomId ??
+      DEMO_ROOM_ID;
+    const table = next.find((t) => t.roomId === pick) ?? next[0];
+    if (table) setLobbyStats(lobbyFromTable(table));
+  }, [selectedRoomId]);
 
   const fetchLobby = useCallback(async () => {
     try {
-      const res = await fetch(demoApiUrl("/api/demo/lobby"));
+      const controller = new AbortController();
+      const timer = window.setTimeout(() => controller.abort(), 8_000);
+      const res = await fetch(demoHttpApiUrl("/api/demo/lobby"), {
+        signal: controller.signal,
+      });
+      window.clearTimeout(timer);
       if (!res.ok) return null;
-      const stats = (await res.json()) as DemoLobbyStats;
-      if (stats) {
-        setLobbyStats(stats);
+      const data = (await res.json()) as { tables?: DemoTableInfo[] };
+      if (data.tables) {
+        applyTables(data.tables);
         setServerReady(true);
+        setJoinError(null);
       }
-      return stats;
+      return data;
     } catch {
       return null;
     }
-  }, []);
+  }, [applyTables]);
 
-  const fetchState = useCallback(async (sid: string) => {
+  const fetchState = useCallback(async (sid: string, rid?: string) => {
+    const room = rid ?? roomIdRef.current;
     try {
       const res = await fetch(
-        demoApiUrl(`/api/demo/state?sessionId=${encodeURIComponent(sid)}`)
+        demoHttpApiUrl(
+          `/api/demo/state?sessionId=${encodeURIComponent(sid)}&roomId=${encodeURIComponent(room)}`
+        )
       );
       if (res.status === 404) return null;
       if (!res.ok) return null;
       const data = await res.json();
+      if (data.roomId) {
+        setRoomId(data.roomId);
+        roomIdRef.current = data.roomId;
+        localStorage.setItem(DEMO_ROOM_STORAGE_KEY, data.roomId);
+      }
       if (data.state) {
-        applyViewRole(data.state, sid, setView, setRole, setLobbyStats);
+        applyViewRole(data.state, sid, setView, setRole, setLobbyStats, setUsername);
       }
       if (data.lobby) setLobbyStats(data.lobby);
       return data;
@@ -100,14 +164,24 @@ export function useDemoGame() {
     async (path: string, body: Record<string, unknown> = {}) => {
       const sid = sessionIdRef.current;
       if (!sid) return { ok: false, error: "Not in demo" };
-      const res = await fetch(demoApiUrl(path), {
+      const res = await fetch(demoHttpApiUrl(path), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: sid, ...body }),
+        body: JSON.stringify({
+          sessionId: sid,
+          roomId: roomIdRef.current,
+          ...body,
+        }),
       });
       const data = await res.json();
+      if (data.roomId) {
+        setRoomId(data.roomId);
+        roomIdRef.current = data.roomId;
+        localStorage.setItem(DEMO_ROOM_STORAGE_KEY, data.roomId);
+      }
       if (data.state) {
-        applyViewRole(data.state, sid, setView, setRole, setLobbyStats);
+        applyViewRole(data.state, sid, setView, setRole, setLobbyStats, setUsername);
+        setSeatDesync(false);
       }
       if (data.lobby) setLobbyStats(data.lobby);
       return data;
@@ -115,13 +189,26 @@ export function useDemoGame() {
     []
   );
 
-  const syncSocket = useCallback((sid: string) => {
+  const syncSocket = useCallback((sid: string, rid?: string) => {
     const socket = socketRef.current;
     if (!socket?.connected) return;
-    socket.emit("join-room", DEMO_ROOM_ID);
-    socket.emit("demo-sync", { sessionId: sid }, (res: { ok?: boolean; state?: DemoRoomView }) => {
-      if (res?.state) setView(res.state);
-    });
+    const room = rid ?? roomIdRef.current;
+    socket.emit("join-room", room);
+    socket.emit(
+      "demo-sync",
+      { sessionId: sid, roomId: room },
+      (res: { ok?: boolean; state?: DemoRoomView; roomId?: string }) => {
+        if (res?.roomId) {
+          setRoomId(res.roomId);
+          roomIdRef.current = res.roomId;
+          localStorage.setItem(DEMO_ROOM_STORAGE_KEY, res.roomId);
+        }
+        if (res?.state) {
+          applyViewRole(res.state, sid, setView, setRole, setLobbyStats, setUsername);
+          setSeatDesync(false);
+        }
+      }
+    );
   }, []);
 
   useEffect(() => {
@@ -129,23 +216,35 @@ export function useDemoGame() {
   }, [sessionId]);
 
   useEffect(() => {
+    roomIdRef.current = roomId;
+  }, [roomId]);
+
+  useEffect(() => {
+    const storedRoom = localStorage.getItem(DEMO_ROOM_STORAGE_KEY);
+    if (storedRoom) {
+      setRoomId(storedRoom);
+      roomIdRef.current = storedRoom;
+      setSelectedRoomId(storedRoom);
+    }
+
     void fetchLobby();
-    const lobbyPoll = setInterval(() => void fetchLobby(), 5000);
+    const lobbyPoll = setInterval(() => void fetchLobby(), 3000);
 
     const socket = createAppSocket({ reconnectionAttempts: SOCKET_URL ? 12 : 3 });
     socketRef.current = socket;
 
     const onConnect = () => {
       setSocketLive(true);
-      setServerReady(true);
+      void fetchLobby();
       httpModeRef.current = false;
       setJoinError(null);
-      socket.emit("join-room", DEMO_ROOM_ID);
       const sid = sessionIdRef.current ?? localStorage.getItem(DEMO_SESSION_STORAGE_KEY);
-      if (sid) syncSocket(sid);
-      else {
-        socket.emit("demo-peek", (stats: DemoLobbyStats) => {
-          if (stats) setLobbyStats(stats);
+      const rid = roomIdRef.current;
+      if (sid) {
+        syncSocket(sid, rid);
+      } else {
+        socket.emit("demo-peek", (payload: { tables?: DemoTableInfo[] }) => {
+          if (payload?.tables) applyTables(payload.tables);
         });
       }
     };
@@ -153,26 +252,25 @@ export function useDemoGame() {
     socket.on("connect", onConnect);
     socket.on("disconnect", () => setSocketLive(false));
     socket.on("connect_error", () => {
+      setSocketLive(false);
       httpModeRef.current = true;
       void fetchLobby();
     });
 
+    socket.on("demo-lobby-tables", (payload: { tables?: DemoTableInfo[] }) => {
+      if (payload?.tables) applyTables(payload.tables);
+    });
+
     socket.on("demo-lobby-stats", (stats: DemoLobbyStats) => {
-      if (stats) setLobbyStats(stats);
+      if (stats && roomIdRef.current) setLobbyStats(stats);
     });
 
     socket.on("demo-state", (state: DemoRoomView) => {
-      setView(state);
-      setLobbyStats({
-        playerCount: state.playerCount,
-        spectators: state.spectators.length,
-        isFull: state.playerCount >= 6,
-        maxPlayers: 6,
-      });
       const sid = sessionIdRef.current;
       if (sid) {
-        if (state.players.some((p) => p.sessionId === sid)) setRole("player");
-        else if (state.spectators.some((s) => s.sessionId === sid)) setRole("spectator");
+        applyViewRole(state, sid, setView, setRole, setLobbyStats, setUsername);
+      } else {
+        setView(state);
       }
     });
 
@@ -180,15 +278,19 @@ export function useDemoGame() {
       setMessages((prev) => [...prev.slice(-99), msg]);
     });
 
+    const storedName = localStorage.getItem(DEMO_USERNAME_STORAGE_KEY);
+    if (storedName) setUsername(storedName);
+
     const stored = localStorage.getItem(DEMO_SESSION_STORAGE_KEY);
     if (stored) {
       setSessionId(stored);
       if (socket.connected) {
-        syncSocket(stored);
+        syncSocket(stored, roomIdRef.current);
       } else {
-        void fetchState(stored).then((data) => {
+        void fetchState(stored, roomIdRef.current).then((data) => {
           if (!data) {
             localStorage.removeItem(DEMO_SESSION_STORAGE_KEY);
+            localStorage.removeItem(DEMO_ROOM_STORAGE_KEY);
             setSessionId(null);
             sessionIdRef.current = null;
           }
@@ -198,16 +300,17 @@ export function useDemoGame() {
 
     return () => {
       clearInterval(lobbyPoll);
-      socket.emit("leave-room", DEMO_ROOM_ID);
+      const rid = roomIdRef.current;
+      if (rid) socket.emit("leave-room", rid);
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [syncSocket, fetchLobby, fetchState]);
+  }, [syncSocket, fetchLobby, fetchState, applyTables]);
 
   const fetchChat = useCallback(async () => {
     try {
       const res = await fetch(
-        demoApiUrl(`/api/demo/chat?since=${lastChatTsRef.current}`)
+        demoHttpApiUrl(`/api/demo/chat?since=${lastChatTsRef.current}`)
       );
       if (!res.ok) return;
       const data = await res.json();
@@ -235,10 +338,10 @@ export function useDemoGame() {
     if (!sid) return;
     if (socketLive && !httpModeRef.current) return;
 
-    void fetchState(sid);
-    const poll = setInterval(() => void fetchState(sid), 1200);
+    void fetchState(sid, roomIdRef.current);
+    const poll = setInterval(() => void fetchState(sid, roomIdRef.current), 1200);
     return () => clearInterval(poll);
-  }, [sessionId, socketLive, fetchState]);
+  }, [sessionId, socketLive, fetchState, roomId]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -259,8 +362,17 @@ export function useDemoGame() {
         setSessionId(res.sessionId);
         sessionIdRef.current = res.sessionId;
         localStorage.setItem(DEMO_SESSION_STORAGE_KEY, res.sessionId);
+        setSeatDesync(false);
+      }
+      if (res.roomId) {
+        setRoomId(res.roomId);
+        roomIdRef.current = res.roomId;
+        setSelectedRoomId(res.roomId);
+        localStorage.setItem(DEMO_ROOM_STORAGE_KEY, res.roomId);
+      }
+      if (res.sessionId) {
         if (socketRef.current?.connected) {
-          syncSocket(res.sessionId);
+          syncSocket(res.sessionId, res.roomId);
         } else {
           httpModeRef.current = true;
         }
@@ -269,13 +381,66 @@ export function useDemoGame() {
       if (res.role) setRole(res.role);
       if (res.notice) setJoinNotice(res.notice);
       setUsername(valid);
+      try {
+        localStorage.setItem(DEMO_USERNAME_STORAGE_KEY, valid);
+      } catch {
+        // ignore
+      }
       setJoinError(null);
     },
     [syncSocket]
   );
 
+  const reconnectSeat = useCallback(async () => {
+    const sid = sessionIdRef.current;
+    const name = validateUsername(username) ?? validateUsername(
+      localStorage.getItem(DEMO_USERNAME_STORAGE_KEY) ?? ""
+    );
+    if (!sid || !name) {
+      setJoinError("Could not reconnect — leave the table and join again");
+      return;
+    }
+    reclaimAttemptedRef.current = true;
+    setJoining(true);
+    try {
+      const data = await postDemoJson<JoinResult>("/api/demo/join", {
+        username: name,
+        sessionId: sid,
+        preferPlayer: true,
+        roomId: roomIdRef.current,
+      });
+      applyJoinResult(data, name);
+      if (data.ok) setSeatDesync(false);
+      else setJoinError(data.error ?? "Could not reconnect to your seat");
+    } catch {
+      setJoinError("Network error — try again");
+    } finally {
+      setJoining(false);
+    }
+  }, [applyJoinResult, username]);
+
+  useEffect(() => {
+    if (!view || !sessionId || reclaimAttemptedRef.current) return;
+    const seated = view.players.some((p) => p.sessionId === sessionId);
+    if (seated) {
+      setSeatDesync(false);
+      return;
+    }
+    const name =
+      validateUsername(username) ??
+      validateUsername(localStorage.getItem(DEMO_USERNAME_STORAGE_KEY) ?? "");
+    if (!name) return;
+    const orphan = view.players.find(
+      (p) => p.username.toLowerCase() === name.toLowerCase()
+    );
+    if (!orphan) return;
+    setSeatDesync(true);
+    reclaimAttemptedRef.current = true;
+    void reconnectSeat();
+  }, [view, sessionId, username, reconnectSeat]);
+
   const join = useCallback(
-    async (name: string, preferPlayer = true) => {
+    async (name: string, preferPlayer = true, targetRoomId?: string | null) => {
       const valid = validateUsername(name);
       if (!valid) {
         setJoinError("Pick a username (2–16 chars, letters/numbers/_)");
@@ -283,6 +448,11 @@ export function useDemoGame() {
       }
 
       const stored = localStorage.getItem(DEMO_SESSION_STORAGE_KEY);
+      const room =
+        targetRoomId ??
+        selectedRoomId ??
+        tables.find((t) => !t.isFull)?.roomId ??
+        DEMO_ROOM_ID;
 
       setJoinError(null);
       setJoinNotice(null);
@@ -290,24 +460,31 @@ export function useDemoGame() {
       setUsername(valid);
 
       try {
-        const res = await fetch(demoApiUrl("/api/demo/join"), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+        const data = await postDemoJson<JoinResult>(
+          "/api/demo/join",
+          {
             username: valid,
             preferPlayer,
             sessionId: stored ?? undefined,
-          }),
-        });
-        const data: JoinResult = await res.json();
+            roomId: room,
+          },
+          15_000
+        );
         applyJoinResult(data, valid);
-      } catch {
-        setJoinError("Network error — check your connection and try again");
+        if (!data.ok) {
+          setJoinError(data.error ?? "Could not join");
+        }
+      } catch (err) {
+        const msg =
+          err instanceof Error && err.message === "Request timed out"
+            ? "Join timed out — try again in a few seconds"
+            : "Network error — check your connection and try again";
+        setJoinError(msg);
       } finally {
         setJoining(false);
       }
     },
-    [applyJoinResult]
+    [applyJoinResult, selectedRoomId, tables]
   );
 
   const leaveSeat = useCallback(async () => {
@@ -404,10 +581,11 @@ export function useDemoGame() {
       const trimmed = text.trim();
       if (!sid || !name || !trimmed) return;
 
+      const rid = roomIdRef.current;
       const socket = socketRef.current;
       if (socket?.connected && !httpModeRef.current) {
         socket.emit("chat-message", {
-          roomId: DEMO_ROOM_ID,
+          roomId: rid,
           wallet: sid,
           displayName: name,
           avatar,
@@ -417,11 +595,12 @@ export function useDemoGame() {
       }
 
       try {
-        const res = await fetch(demoApiUrl("/api/demo/chat"), {
+        const res = await fetch(demoHttpApiUrl("/api/demo/chat"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             sessionId: sid,
+            roomId: rid,
             displayName: name,
             avatar,
             text: trimmed,
@@ -442,9 +621,10 @@ export function useDemoGame() {
   useEffect(() => {
     if (!sessionId || view) return;
     const timer = window.setTimeout(() => {
-      void fetchState(sessionId).then((data) => {
+      void fetchState(sessionId, roomIdRef.current).then((data) => {
         if (data?.state) return;
         localStorage.removeItem(DEMO_SESSION_STORAGE_KEY);
+        localStorage.removeItem(DEMO_ROOM_STORAGE_KEY);
         setSessionId(null);
         sessionIdRef.current = null;
         setJoinError("Session expired — pick a username and join again");
@@ -455,27 +635,42 @@ export function useDemoGame() {
 
   const leaveTable = useCallback(() => {
     localStorage.removeItem(DEMO_SESSION_STORAGE_KEY);
+    localStorage.removeItem(DEMO_ROOM_STORAGE_KEY);
+    localStorage.removeItem(DEMO_USERNAME_STORAGE_KEY);
+    reclaimAttemptedRef.current = false;
     setSessionId(null);
     sessionIdRef.current = null;
     setView(null);
     setRole(null);
     setUsername("");
+    setRoomId(DEMO_ROOM_ID);
+    roomIdRef.current = DEMO_ROOM_ID;
   }, []);
+
+  const quickJoin = useCallback(
+    (name: string) => join(name, true, null),
+    [join]
+  );
 
   return {
     connected: serverReady,
     socketLive,
     view,
     sessionId,
+    roomId,
     role,
     username,
     joinError,
     joinNotice,
     joining,
-    lobbyStats,
     messages,
+    lobbyStats,
+    tables,
+    selectedRoomId,
+    setSelectedRoomId,
     actionPending,
     join,
+    quickJoin,
     leaveSeat,
     takeSeat,
     startHand,
@@ -483,6 +678,8 @@ export function useDemoGame() {
     sendAction,
     sendMessage,
     leaveTable,
+    seatDesync,
+    reconnectSeat,
     socket: socketRef,
   };
 }

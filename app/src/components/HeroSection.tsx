@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import TokenContractAddress from "@/components/token/TokenContractAddress";
 import {
   BUY_IN_TIERS,
   FEATURED_TIER_INDEX,
@@ -60,6 +61,7 @@ export default function HeroSection() {
               Play · {featured.label}
             </Link>
           </div>
+          <TokenContractAddress variant="hero" />
         </div>
 
         <div className="surface-card relative overflow-hidden rounded-2xl p-6 sm:p-7">

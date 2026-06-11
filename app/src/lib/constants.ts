@@ -49,6 +49,9 @@ export const PUMP_FUN_URL =
 export const SOLANA_NETWORK =
   process.env.NEXT_PUBLIC_SOLANA_NETWORK ?? "devnet";
 
+/** Network cluster pill — off for public site (no devnet/mainnet badge in header). */
+export const SHOW_NETWORK_BADGE = false;
+
 export const SHOW_DEV_CONTROLS =
   process.env.NEXT_PUBLIC_SHOW_DEV_CONTROLS === "true";
 
@@ -111,6 +114,12 @@ export function explorerTxUrl(signature: string): string {
   const cluster =
     SOLANA_NETWORK === "mainnet-beta" ? "" : `?cluster=${SOLANA_NETWORK}`;
   return `https://solscan.io/tx/${signature}${cluster}`;
+}
+
+export function explorerMintUrl(mint: string): string {
+  const cluster =
+    SOLANA_NETWORK === "mainnet-beta" ? "" : `?cluster=${SOLANA_NETWORK}`;
+  return `https://solscan.io/token/${mint}${cluster}`;
 }
 
 /** Weekly community tournament — room tier + schedule */

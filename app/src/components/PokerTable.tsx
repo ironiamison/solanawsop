@@ -36,6 +36,8 @@ interface Props {
   sittingOutOverrides?: Record<string, boolean>;
   potWin?: PotWinFlyTarget | null;
   formatAmount?: (n: number) => string;
+  /** Time bank (ms) for the player whose turn it is — keeps seat timer in sync */
+  actingTimeBankMs?: number;
 }
 
 export default function PokerTable({
@@ -50,6 +52,7 @@ export default function PokerTable({
   sittingOutOverrides,
   potWin,
   formatAmount = formatTokens,
+  actingTimeBankMs = 0,
 }: Props) {
   const community = room.communityCards
     .slice(0, room.communityCount)
@@ -73,7 +76,8 @@ export default function PokerTable({
     !!room.turnStartedAt;
   const { secondsLeft: turnSecondsLeft, progress: turnProgress } = useTurnTimer(
     turnTimerActive,
-    room.turnStartedAt
+    room.turnStartedAt,
+    actingTimeBankMs
   );
   const { dealHandId, isDealing, streetReveal } = useHandAnimations(
     room.phase,
@@ -169,7 +173,7 @@ export default function PokerTable({
             <TableSoundToggle muted={muted} onToggle={toggleMute} />
 
             {/* Center content */}
-            <div className="absolute left-1/2 top-[38%] z-[25] -translate-x-1/2 -translate-y-1/2 text-center">
+            <div className="absolute left-1/2 top-[50%] z-[15] -translate-x-1/2 -translate-y-1/2 text-center">
               {room.phase === "waiting" ? (
                 fairnessMode ? (
                   <FairnessBadge mode={fairnessMode} />
@@ -200,12 +204,20 @@ export default function PokerTable({
               const visual = visualSeat(seatIndex, mySeat);
               const coord = SEAT_COORDS[visual];
               const player = playerBySeat.get(seatIndex);
+              const seatOccupied =
+                !!player || (!isEmptySeat(seatPk) && seatPk !== undefined);
+              const seatWallet = player?.wallet ?? seatPk;
               const isMe =
-                myWallet && !isEmptySeat(seatPk) && seatPk.equals(myWallet);
+                !!myWallet &&
+                seatOccupied &&
+                !isEmptySeat(seatWallet) &&
+                seatWallet.equals(myWallet);
               const isTurn =
-                room.currentTurnSeat === seatIndex && room.phase !== "waiting";
+                room.currentTurnSeat === seatIndex &&
+                room.phase !== "waiting" &&
+                player?.status === "active";
 
-              if (isEmptySeat(seatPk)) {
+              if (!seatOccupied) {
                 return (
                   <div
                     key={seatIndex}
@@ -233,7 +245,7 @@ export default function PokerTable({
               return (
                 <PlayerSeat
                   key={seatIndex}
-                  wallet={seatPk}
+                  wallet={seatWallet}
                   player={player}
                   isMe={!!isMe}
                   isTurn={isTurn}

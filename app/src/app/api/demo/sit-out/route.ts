@@ -5,7 +5,8 @@ export async function POST(req: Request) {
   const body = await req.json();
   const result = await handleDemoSitOut(
     body.sessionId ?? "",
-    Boolean(body.sitOut)
+    Boolean(body.sitOut),
+    body.roomId as string | undefined
   );
   return NextResponse.json(result, { status: result.status });
 }

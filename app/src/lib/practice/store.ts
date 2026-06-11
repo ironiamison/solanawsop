@@ -15,6 +15,7 @@ export async function withPracticeRoom<T>(
 ): Promise<T> {
   const roomId = practiceRoomId(userKey);
   const room = await loadChipRoom(roomId, { startStack: DEMO_START_STACK });
+  room.repairLobbyState();
   room.tick();
   processBotTurns(room);
   const result = await fn(room);

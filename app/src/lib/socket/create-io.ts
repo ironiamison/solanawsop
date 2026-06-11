@@ -3,10 +3,8 @@ import { Server } from "socket.io";
 import {
   attachDemoHandlers,
   handleSocketChatMessage,
-  lobbyStats,
   wireDemoBroadcast,
 } from "@/lib/demo/socket";
-import { DEMO_ROOM_ID } from "@/lib/demo/constants";
 import { allowedSocketOrigins } from "@/lib/socket/origins";
 
 interface ChatMessage {
@@ -33,9 +31,6 @@ export function createGameIo(httpServer: HttpServer): Server {
     socket.on("join-room", (roomId: string) => {
       socket.join(roomId);
       socket.data.roomId = roomId;
-      if (roomId === DEMO_ROOM_ID) {
-        socket.emit("demo-lobby-stats", lobbyStats());
-      }
     });
 
     socket.on("leave-room", (roomId: string) => {

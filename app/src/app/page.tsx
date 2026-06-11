@@ -10,12 +10,13 @@ import CashGameCard from "@/components/home/CashGameCard";
 import TournamentsPanel from "@/components/home/TournamentsPanel";
 import PlayerStatsCard from "@/components/home/PlayerStatsCard";
 import HomeLeaderboard from "@/components/home/HomeLeaderboard";
+import ChainTablesSetupBanner from "@/components/home/ChainTablesSetupBanner";
 import GettingStartedCard from "@/components/home/GettingStartedCard";
 import SocialDiscoverCard from "@/components/home/SocialDiscoverCard";
 import TestUsOutCard from "@/components/home/TestUsOutCard";
 import LoadingLobby from "@/components/loading/LoadingLobby";
 import { SectionTitle } from "@/components/home/lobby";
-import { SHOW_DEV_CONTROLS, TOKEN_SYMBOL } from "@/lib/constants";
+import { SHOW_DEV_CONTROLS } from "@/lib/constants";
 import { setupAllRooms } from "@/lib/program";
 import { usePokerProgram } from "@/hooks/usePokerProgram";
 import { useLobbyRooms } from "@/hooks/useLobbyRooms";
@@ -46,16 +47,15 @@ export default function Home() {
 
   const handleSetup = async () => {
     if (!program || !publicKey) return;
-    setStatus("Setting up tables…");
     try {
       const sig = await setupAllRooms(program, publicKey);
       await refreshRooms();
-      setStatus(`Tables ready · ${sig.slice(0, 8)}…`);
+      setStatus(`Cash tables are live · ${sig.slice(0, 8)}…`);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Setup failed";
+      const msg = e instanceof Error ? e.message : "Deploy failed";
       setStatus(
         msg.includes("globalConfig")
-          ? "Program setup failed — refresh and try again (IDL was fixed)."
+          ? "Program config error — refresh and try again."
           : msg
       );
     }
@@ -76,17 +76,11 @@ export default function Home() {
   return (
     <DashboardShell>
       {authenticated && program && publicKey && !tablesDeployed && (
-        <div className="ui-alert ui-alert--amber mb-4">
-          <p className="text-sm">
-            On-chain {TOKEN_SYMBOL} tables are not initialized yet.
-          </p>
-          <p className="mt-1 text-xs opacity-80">
-            After pump.fun launch, set NEXT_PUBLIC_SWSOP_MINT, connect wallet, and run one-time setup.
-          </p>
-          <button type="button" onClick={handleSetup} className="ui-btn ui-btn--primary ui-btn--sm mt-3">
-            Initialize tables
-          </button>
-        </div>
+        <ChainTablesSetupBanner
+          onSetup={handleSetup}
+          status={status}
+          onStatusChange={setStatus}
+        />
       )}
       {SHOW_DEV_CONTROLS && authenticated && program && publicKey && tablesDeployed && (
         <button
@@ -97,7 +91,9 @@ export default function Home() {
           [dev] re-run room setup
         </button>
       )}
-      {status && <p className="mb-2 text-xs text-zinc-600">{status}</p>}
+      {status && tablesDeployed && (
+        <p className="mb-2 text-xs text-zinc-600">{status}</p>
+      )}
 
       <GettingStartedCard />
 

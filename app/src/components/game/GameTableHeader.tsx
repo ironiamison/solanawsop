@@ -3,7 +3,12 @@
 import Link from "next/link";
 import { usePrivyProfile } from "@/hooks/usePrivyProfile";
 import { usePokerProgram } from "@/hooks/usePokerProgram";
-import { formatWager, TOKEN_SYMBOL, SOLANA_NETWORK } from "@/lib/constants";
+import {
+  formatWager,
+  TOKEN_SYMBOL,
+  SHOW_NETWORK_BADGE,
+  SOLANA_NETWORK,
+} from "@/lib/constants";
 
 export default function GameTableHeader({
   buyIn,
@@ -41,10 +46,12 @@ export default function GameTableHeader({
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="hidden items-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 py-1.5 text-[10px] text-zinc-400 sm:flex">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-          {SOLANA_NETWORK}
-        </span>
+        {SHOW_NETWORK_BADGE && (
+          <span className="hidden items-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 py-1.5 text-[10px] text-zinc-400 sm:flex">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+            {SOLANA_NETWORK}
+          </span>
+        )}
         <div className="flex items-center gap-2 rounded-lg border border-violet-500/25 bg-violet-500/10 px-2.5 py-1.5">
           {profile.avatar && (
             // eslint-disable-next-line @next/next/no-img-element

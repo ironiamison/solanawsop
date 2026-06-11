@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { PublicKey } from "@solana/web3.js";
+import TokenContractAddress from "@/components/token/TokenContractAddress";
 import {
   FEATURED_TIER_INDEX,
   PUMP_FUN_URL,
@@ -58,6 +59,8 @@ export default function GameLobbyHero({
             Get {TOKEN_SYMBOL}
           </a>
         </div>
+
+        <TokenContractAddress variant="hero" className="mb-6 justify-center lg:justify-start" />
 
         <div className="flex flex-wrap justify-center gap-6 text-sm lg:justify-start">
           <LiveStat label="Players online" value={onlinePlayers} pulse />

@@ -47,12 +47,18 @@ export default function WsopTablePage({
         connected={game.connected}
         joining={game.joining}
         error={game.joinError}
+        tables={[]}
+        selectedRoomId={roomId}
+        onSelectRoom={() => {}}
         lobbyStats={game.lobbyStats}
         onJoin={() =>
           game.join(name, true, { wallet: publicKey?.toBase58() })
         }
         onSpectate={() =>
           game.join(name, false, { wallet: publicKey?.toBase58() })
+        }
+        onQuickJoin={() =>
+          game.join(name, true, { wallet: publicKey?.toBase58() })
         }
       />
     );

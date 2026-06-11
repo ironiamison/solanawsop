@@ -86,6 +86,7 @@ async function handleDemoHttp(
     if (pathname === "/api/demo/chat" && req.method === "POST") {
       const body = await readJson<{
         sessionId?: string;
+        roomId?: string;
         text?: string;
         displayName?: string;
         avatar?: string;
@@ -98,7 +99,8 @@ async function handleDemoHttp(
     if (pathname === "/api/demo/state" && req.method === "GET") {
       const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
       const sessionId = url.searchParams.get("sessionId") ?? undefined;
-      const result = await handleDemoState(sessionId);
+      const roomId = url.searchParams.get("roomId") ?? undefined;
+      const result = await handleDemoState(sessionId, roomId);
       if (!result.ok) {
         sendJson(res, result.status, { ok: false, error: result.error }, origin);
         return;
@@ -112,6 +114,7 @@ async function handleDemoHttp(
         username?: string;
         preferPlayer?: boolean;
         sessionId?: string;
+        roomId?: string;
       }>(req);
       const result = await handleDemoJoin(body);
       sendJson(res, result.status, result, origin);
@@ -119,39 +122,52 @@ async function handleDemoHttp(
     }
 
     if (pathname === "/api/demo/action" && req.method === "POST") {
-      const body = await readJson<{ sessionId?: string; action?: DemoAction }>(req);
-      const result = await handleDemoAction(body.sessionId ?? "", body.action);
+      const body = await readJson<{
+        sessionId?: string;
+        roomId?: string;
+        action?: DemoAction;
+      }>(req);
+      const result = await handleDemoAction(
+        body.sessionId ?? "",
+        body.action,
+        body.roomId
+      );
       sendJson(res, result.status, result, origin);
       return;
     }
 
     if (pathname === "/api/demo/leave-seat" && req.method === "POST") {
-      const body = await readJson<{ sessionId?: string }>(req);
-      const result = await handleDemoLeaveSeat(body.sessionId ?? "");
+      const body = await readJson<{ sessionId?: string; roomId?: string }>(req);
+      const result = await handleDemoLeaveSeat(body.sessionId ?? "", body.roomId);
       sendJson(res, result.status, result, origin);
       return;
     }
 
     if (pathname === "/api/demo/take-seat" && req.method === "POST") {
-      const body = await readJson<{ sessionId?: string }>(req);
-      const result = await handleDemoTakeSeat(body.sessionId ?? "");
+      const body = await readJson<{ sessionId?: string; roomId?: string }>(req);
+      const result = await handleDemoTakeSeat(body.sessionId ?? "", body.roomId);
       sendJson(res, result.status, result, origin);
       return;
     }
 
     if (pathname === "/api/demo/sit-out" && req.method === "POST") {
-      const body = await readJson<{ sessionId?: string; sitOut?: boolean }>(req);
+      const body = await readJson<{
+        sessionId?: string;
+        roomId?: string;
+        sitOut?: boolean;
+      }>(req);
       const result = await handleDemoSitOut(
         body.sessionId ?? "",
-        Boolean(body.sitOut)
+        Boolean(body.sitOut),
+        body.roomId
       );
       sendJson(res, result.status, result, origin);
       return;
     }
 
     if (pathname === "/api/demo/start-hand" && req.method === "POST") {
-      const body = await readJson<{ sessionId?: string }>(req);
-      const result = await handleDemoStartHand(body.sessionId ?? "");
+      const body = await readJson<{ sessionId?: string; roomId?: string }>(req);
+      const result = await handleDemoStartHand(body.sessionId ?? "", body.roomId);
       sendJson(res, result.status, result, origin);
       return;
     }

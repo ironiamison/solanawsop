@@ -3,10 +3,10 @@
 import { useMemo } from "react";
 import { AnchorProvider } from "@coral-xyz/anchor";
 import {
-  Connection,
   PublicKey,
   Transaction,
   VersionedTransaction,
+  type Connection,
 } from "@solana/web3.js";
 import { usePrivy } from "@privy-io/react-auth";
 import {
@@ -14,9 +14,7 @@ import {
   useWallets,
 } from "@privy-io/react-auth/solana";
 import { getProgram, SolanaPokerProgram } from "@/lib/program";
-
-const RPC_URL =
-  process.env.NEXT_PUBLIC_RPC_URL || "https://api.devnet.solana.com";
+import { getSolanaConnection } from "@/lib/solana-connection";
 
 export function usePokerProgram(): {
   program: SolanaPokerProgram | null;
@@ -30,7 +28,7 @@ export function usePokerProgram(): {
   const { wallets } = useWallets();
   const { signTransaction } = useSignTransaction();
 
-  const connection = useMemo(() => new Connection(RPC_URL, "confirmed"), []);
+  const connection = useMemo(() => getSolanaConnection(), []);
 
   const solanaWallet = wallets[0] ?? null;
   const walletAddress = solanaWallet?.address ?? null;

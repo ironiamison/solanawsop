@@ -5,11 +5,14 @@ import { toSolanaWalletConnectors } from "@privy-io/react-auth/solana";
 import { createSolanaRpc, createSolanaRpcSubscriptions } from "@solana/kit";
 import ProfileBootstrap from "@/components/ProfileBootstrap";
 import { TwitterLinkProvider } from "@/components/TwitterLinkProvider";
+import { LobbyRoomsProvider } from "@/hooks/LobbyRoomsProvider";
 import { APP_URL } from "@/lib/constants";
+import { clientRpcUrl, clientWsUrl } from "@/lib/rpc-url";
 
-const rpcUrl =
-  process.env.NEXT_PUBLIC_RPC_URL || "https://api.devnet.solana.com";
-const wsUrl = rpcUrl.replace("https://", "wss://").replace("http://", "ws://");
+const devnetRpc = clientRpcUrl("devnet");
+const devnetWs = clientWsUrl("devnet");
+const mainnetRpc = clientRpcUrl("mainnet-beta");
+const mainnetWs = clientWsUrl("mainnet-beta");
 
 export default function AppPrivyProvider({
   children,
@@ -63,22 +66,22 @@ export default function AppPrivyProvider({
         solana: {
           rpcs: {
             "solana:devnet": {
-              rpc: createSolanaRpc(rpcUrl),
-              rpcSubscriptions: createSolanaRpcSubscriptions(wsUrl),
+              rpc: createSolanaRpc(devnetRpc),
+              rpcSubscriptions: createSolanaRpcSubscriptions(devnetWs),
             },
             "solana:mainnet": {
-              rpc: createSolanaRpc("https://api.mainnet-beta.solana.com"),
-              rpcSubscriptions: createSolanaRpcSubscriptions(
-                "wss://api.mainnet-beta.solana.com"
-              ),
+              rpc: createSolanaRpc(mainnetRpc),
+              rpcSubscriptions: createSolanaRpcSubscriptions(mainnetWs),
             },
           },
         },
       }}
     >
       <TwitterLinkProvider>
-        <ProfileBootstrap />
-        {children}
+        <LobbyRoomsProvider>
+          <ProfileBootstrap />
+          {children}
+        </LobbyRoomsProvider>
       </TwitterLinkProvider>
     </PrivyProvider>
   );

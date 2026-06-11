@@ -2801,7 +2801,7 @@ body {
 }
 
 .premium-seat-hero {
-  z-index: 18;
+  z-index: 22;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -3939,6 +3939,91 @@ html:has(.lobby-shell) {
   .dashboard-footer {
     margin-bottom: 0.25rem;
   }
+}
+
+/* Token contract address (CA) */
+.token-ca {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  font-size: 0.6875rem;
+}
+
+.token-ca-label {
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #a78bfa;
+}
+
+.token-ca-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  max-width: 100%;
+  border-radius: 0.45rem;
+  border: 1px solid rgba(167, 139, 250, 0.25);
+  background: rgba(109, 40, 217, 0.12);
+  padding: 0.28rem 0.55rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.6875rem;
+  color: #e9d5ff;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.token-ca-value:hover {
+  border-color: rgba(167, 139, 250, 0.45);
+  background: rgba(109, 40, 217, 0.2);
+}
+
+.token-ca-copy {
+  font-family: inherit;
+  font-size: 0.5625rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #c4b5fd;
+}
+
+.token-ca-links {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.token-ca-link {
+  font-weight: 600;
+  color: #71717a;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.token-ca-link:hover {
+  color: #d4d4d8;
+}
+
+.token-ca--hero {
+  margin-top: 1rem;
+}
+
+.token-ca--banner {
+  margin-top: 0.85rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 0.55rem;
+  border: 1px solid rgba(167, 139, 250, 0.2);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.token-ca--footer {
+  width: 100%;
+  justify-content: center;
+  margin-top: 0.75rem;
+}
+
+.token-ca--compact {
+  gap: 0.35rem 0.5rem;
+  font-size: 0.625rem;
 }
 
 .lobby-hero {
@@ -7891,4 +7976,215 @@ html:has(.lobby-shell) {
   .tourney-table td:nth-child(3) {
     display: none;
   }
+}
+
+/* ── Chain tables setup banner (lobby) ── */
+.chain-setup-banner {
+  position: relative;
+  margin-bottom: 1.25rem;
+  overflow: hidden;
+  border-radius: 1rem;
+  border: 1px solid rgba(167, 139, 250, 0.22);
+  background:
+    linear-gradient(135deg, rgba(76, 29, 149, 0.18) 0%, rgba(12, 10, 20, 0.95) 42%, rgba(8, 8, 12, 0.98) 100%);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset,
+    0 12px 40px rgba(0, 0, 0, 0.35);
+}
+
+.chain-setup-banner-glow {
+  position: absolute;
+  top: -40%;
+  right: -8%;
+  width: 42%;
+  height: 140%;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, rgba(139, 92, 246, 0.22), transparent 68%);
+}
+
+.chain-setup-banner-inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1.35rem;
+  padding: 1.35rem 1.35rem 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .chain-setup-banner-inner {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 1.5rem;
+    padding: 1.6rem 1.75rem 1.75rem;
+  }
+}
+
+.chain-setup-banner-icon {
+  display: flex;
+  height: 2.75rem;
+  width: 2.75rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(167, 139, 250, 0.35);
+  background: rgba(139, 92, 246, 0.12);
+  color: #c4b5fd;
+}
+
+.chain-setup-banner-icon svg {
+  height: 1.35rem;
+  width: 1.35rem;
+}
+
+.chain-setup-banner-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.chain-setup-kicker {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #a78bfa;
+}
+
+.chain-setup-title {
+  margin-top: 0.3rem;
+  font-family: var(--font-instrument-serif), Georgia, serif;
+  font-size: clamp(1.25rem, 2.2vw, 1.55rem);
+  font-weight: 400;
+  line-height: 1.15;
+  color: #fafafa;
+}
+
+.chain-setup-desc {
+  margin-top: 0.5rem;
+  max-width: 36rem;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: #a1a1aa;
+}
+
+.chain-setup-steps {
+  margin: 0.85rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.chain-setup-step {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.8125rem;
+  color: #d4d4d8;
+}
+
+.chain-setup-step--done {
+  color: #6ee7b7;
+}
+
+.chain-setup-step-dot {
+  flex-shrink: 0;
+  height: 0.4rem;
+  width: 0.4rem;
+  border-radius: 999px;
+  background: #71717a;
+}
+
+.chain-setup-step--done .chain-setup-step-dot {
+  background: #34d399;
+  box-shadow: 0 0 8px rgba(52, 211, 153, 0.5);
+}
+
+.chain-setup-link {
+  color: #c4b5fd;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.chain-setup-link:hover {
+  color: #e9d5ff;
+}
+
+.chain-setup-dev-hint {
+  margin-top: 0.65rem;
+  font-size: 0.6875rem;
+  color: #52525b;
+}
+
+.chain-setup-dev-hint code {
+  font-size: 0.625rem;
+  color: #71717a;
+}
+
+.chain-setup-status {
+  margin-top: 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #6ee7b7;
+}
+
+.chain-setup-status--error {
+  color: #fca5a5;
+}
+
+.chain-setup-banner-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.65rem;
+  flex-shrink: 0;
+}
+
+@media (min-width: 768px) {
+  .chain-setup-banner-actions {
+    align-items: flex-end;
+    padding-top: 0.15rem;
+    min-width: 11.5rem;
+  }
+}
+
+.chain-setup-cta {
+  width: 100%;
+  padding: 0.7rem 1.15rem !important;
+  font-size: 0.875rem !important;
+  white-space: nowrap;
+}
+
+.chain-setup-waiting-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  background: rgba(245, 158, 11, 0.08);
+  padding: 0.55rem 1rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #fcd34d;
+  text-align: center;
+}
+
+.chain-setup-secondary-link {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #a1a1aa;
+  text-align: center;
+  transition: color 0.15s ease;
+}
+
+@media (min-width: 768px) {
+  .chain-setup-secondary-link {
+    text-align: right;
+  }
+}
+
+.chain-setup-secondary-link:hover {
+  color: #e4e4e7;
 }

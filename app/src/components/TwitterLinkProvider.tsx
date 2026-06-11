@@ -68,7 +68,9 @@ export function TwitterLinkProvider({ children }: { children: React.ReactNode })
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({}),
+      body: JSON.stringify({
+        walletAddress: user?.wallet?.address,
+      }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -77,8 +79,13 @@ export function TwitterLinkProvider({ children }: { children: React.ReactNode })
           "Profile sync failed. Refresh the page if X already shows as linked."
       );
     }
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("wsop-profile-synced", { detail: data })
+      );
+    }
     return data;
-  }, [getAccessToken]);
+  }, [getAccessToken, user?.wallet?.address]);
 
   const { linkTwitter } = useLinkAccount({
     onSuccess: async () => {

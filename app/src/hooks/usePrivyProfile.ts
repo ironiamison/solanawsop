@@ -36,10 +36,10 @@ export function usePrivyProfile(): PrivyProfile {
   }, [twitterHandle, user?.email?.address, walletAddress]);
 
   const syncProfile = useCallback(async () => {
-    if (!authenticated || !user?.id) return;
+    if (!authenticated || !user?.id) return null;
     try {
       const token = await getAccessToken();
-      if (!token) return;
+      if (!token) return null;
       const referralCode =
         typeof window !== "undefined"
           ? localStorage.getItem(REFERRAL_STORAGE_KEY) ?? undefined
@@ -52,13 +52,22 @@ export function usePrivyProfile(): PrivyProfile {
         },
         body: JSON.stringify({ walletAddress, referralCode }),
       });
+      const data = await res.json().catch(() => ({}));
       if (res.ok && referralCode) {
         localStorage.removeItem(REFERRAL_STORAGE_KEY);
       }
+      if (res.ok && typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("wsop-profile-synced", {
+            detail: data as { user?: { rewardPoints?: number } },
+          })
+        );
+      }
+      return res.ok ? data : null;
     } catch {
-      // non-blocking
+      return null;
     }
-  }, [authenticated, getAccessToken, user?.id, walletAddress, twitterHandle]);
+  }, [authenticated, getAccessToken, user?.id, walletAddress]);
 
   useEffect(() => {
     syncProfile();

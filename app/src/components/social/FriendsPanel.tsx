@@ -65,20 +65,24 @@ export default function FriendsPanel({ compact = false }: { compact?: boolean })
     const target = (handleOrQuery ?? query).trim();
     if (!target) return;
     setStatus("Sending…");
-    const res = await authFetch("/api/friends", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: target }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setStatus(data.error ?? "Failed");
-      return;
+    try {
+      const res = await authFetch("/api/friends", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: target }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setStatus((data as { error?: string }).error ?? "Could not send request");
+        return;
+      }
+      setQuery("");
+      setSuggestions([]);
+      setStatus("Request sent");
+      await load();
+    } catch {
+      setStatus("Network error — try again");
     }
-    setQuery("");
-    setSuggestions([]);
-    setStatus("Request sent");
-    load();
   };
 
   const respond = async (friendshipId: string, action: "accept" | "decline") => {

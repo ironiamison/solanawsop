@@ -9,6 +9,10 @@ import { TOKEN_DECIMALS } from "./constants";
 import { vaultPda } from "./pdas";
 
 /** Pump.fun mint — set `NEXT_PUBLIC_SWSOP_MINT` after launch. */
+export function getSwspMintAddress(): string | null {
+  return getSwspMint()?.toBase58() ?? null;
+}
+
 export function getSwspMint(): PublicKey | null {
   const raw = process.env.NEXT_PUBLIC_SWSOP_MINT?.trim();
   if (!raw) return null;

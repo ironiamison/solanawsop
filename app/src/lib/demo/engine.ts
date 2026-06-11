@@ -152,6 +152,52 @@ export class DemoRoomEngine {
     return false;
   }
 
+  /**
+   * Re-attach a seat when the browser lost its session id (cleared storage, new tab)
+   * but the same username is still seated at the table.
+   */
+  reclaimSeatForUsername(
+    newSessionId: string,
+    username: string
+  ): "player" | "spectator" | null {
+    if (this.hasSession(newSessionId)) return null;
+    const lower = username.toLowerCase();
+
+    for (const [oldSid, player] of this.players.entries()) {
+      if (oldSid === newSessionId || player.username.toLowerCase() !== lower) {
+        continue;
+      }
+      this.transferPlayerSession(oldSid, newSessionId);
+      return "player";
+    }
+
+    for (const [oldSid, spec] of this.spectators.entries()) {
+      if (oldSid === newSessionId || spec.username.toLowerCase() !== lower) {
+        continue;
+      }
+      this.spectators.delete(oldSid);
+      this.spectators.set(newSessionId, {
+        sessionId: newSessionId,
+        username: spec.username,
+        socketId: spec.socketId,
+      });
+      return "spectator";
+    }
+
+    return null;
+  }
+
+  private transferPlayerSession(oldSessionId: string, newSessionId: string): void {
+    const player = this.players.get(oldSessionId);
+    if (!player) return;
+    this.players.delete(oldSessionId);
+    player.sessionId = newSessionId;
+    this.players.set(newSessionId, player);
+    const seatIdx = this.seatToSession.findIndex((s) => s === oldSessionId);
+    if (seatIdx >= 0) this.seatToSession[seatIdx] = newSessionId;
+    this.reconcileSeats();
+  }
+
   /** Seat a bot player at a fixed seat (practice tables only) */
   addBotPlayer(seat: number, sessionId: string, username: string): void {
     if (this.phase !== "waiting" || this.seatToSession[seat]) return;
@@ -171,6 +217,7 @@ export class DemoRoomEngine {
     };
     this.players.set(sessionId, player);
     this.seatToSession[seat] = sessionId;
+    this.reconcileSeats();
   }
 
   joinAsPlayer(
@@ -211,6 +258,7 @@ export class DemoRoomEngine {
     };
     this.players.set(sessionId, player);
     this.seatToSession[seat] = sessionId;
+    this.reconcileSeats();
     this.maybeScheduleAutoDeal();
     return { ok: true };
   }
@@ -279,6 +327,10 @@ export class DemoRoomEngine {
     this.autoDealAt = Date.now() + AUTO_DEAL_DELAY_MS;
   }
 
+  scheduleAutoDealIfReady(): void {
+    this.maybeScheduleAutoDeal();
+  }
+
   private maybeScheduleAutoDeal(): void {
     if (this.phase !== "waiting") return;
     if (this.readyToPlayPlayers().length < 2) {
@@ -286,6 +338,16 @@ export class DemoRoomEngine {
       return;
     }
     if (!this.autoDealAt) this.scheduleAutoDeal();
+  }
+
+  removePlayer(sessionId: string): void {
+    if (this.phase !== "waiting") return;
+    const player = this.players.get(sessionId);
+    if (!player) return;
+    this.players.delete(sessionId);
+    if (this.seatToSession[player.seat] === sessionId) {
+      this.seatToSession[player.seat] = null;
+    }
   }
 
   /** Called on each server tick — starts the next hand when the delay elapses */
@@ -300,9 +362,72 @@ export class DemoRoomEngine {
 
   /** Run turn timeouts and scheduled auto-deals */
   tick(): boolean {
-    let changed = this.checkTurnTimeout();
+    let changed = this.ensureActiveTurn();
+    if (this.checkTurnTimeout()) changed = true;
+    if (this.tryRunOutBoard()) changed = true;
+    if (this.phase === "waiting") {
+      const before = this.autoDealAt;
+      this.maybeScheduleAutoDeal();
+      if (this.autoDealAt !== before) changed = true;
+    }
     if (this.processAutoDeal()) changed = true;
     return changed;
+  }
+
+  /** Clear stale hand UI state between hands (corrupt snapshots, practice reload). */
+  repairLobbyState(): void {
+    if (this.phase !== "waiting") return;
+    this.pot = 0;
+    this.communityCount = 0;
+    this.communityCards = [
+      EMPTY_CARD,
+      EMPTY_CARD,
+      EMPTY_CARD,
+      EMPTY_CARD,
+      EMPTY_CARD,
+    ];
+    this.currentBet = 0;
+    this.minRaise = DEMO_BIG_BLIND;
+    this.turnStartedAt = 0;
+    this.statusMessage = null;
+    this.lastHandWin = null;
+
+    for (const p of this.players.values()) {
+      p.roundBet = 0;
+      p.totalBet = 0;
+      p.holeCards = [EMPTY_CARD, EMPTY_CARD];
+      p.status = "waiting";
+      p.hasActed = false;
+    }
+
+    this.reconcileSeats();
+    this.maybeScheduleAutoDeal();
+  }
+
+  /** Fix seat map drift from concurrent joins (Redis races) or bad snapshots. */
+  reconcileSeats(): void {
+    if (this.phase !== "waiting") return;
+
+    this.seatToSession = Array(DEMO_MAX_PLAYERS).fill(null);
+    const sorted = [...this.players.values()].sort((a, b) => a.seat - b.seat);
+
+    for (const p of sorted) {
+      let seat = p.seat;
+      if (
+        seat < 0 ||
+        seat >= DEMO_MAX_PLAYERS ||
+        this.seatToSession[seat] !== null
+      ) {
+        const free = this.seatToSession.findIndex((s) => s === null);
+        if (free < 0) {
+          this.players.delete(p.sessionId);
+          continue;
+        }
+        seat = free;
+        p.seat = seat;
+      }
+      this.seatToSession[seat] = p.sessionId;
+    }
   }
 
   setSitOut(
@@ -399,7 +524,35 @@ export class DemoRoomEngine {
     player.timeBankMs = consumeTimeBank(this.turnStartedAt, player.timeBankMs);
   }
 
-  /** Server-side timeout — auto-folds when action timer + time bank are exhausted */
+  /** Skip turn indicator when it points at a folded / all-in seat */
+  private ensureActiveTurn(): boolean {
+    if (!this.isBettingPhase()) return false;
+    const player = this.playerAtSeat(this.currentTurnSeat);
+    if (player?.status === "active") return false;
+    this.advanceTurn();
+    this.tryAdvanceStreet();
+    return true;
+  }
+
+  /** When everyone left is all-in, deal remaining streets to showdown */
+  private tryRunOutBoard(): boolean {
+    if (!this.isBettingPhase()) return false;
+    const active = [...this.players.values()].filter((p) => p.status === "active");
+    if (active.length > 0) return false;
+    if (this.countContenders() <= 1) return false;
+
+    while (this.phase !== "river") {
+      this.tryAdvanceStreet();
+      if (!this.isBettingPhase()) return true;
+    }
+    if (this.bettingRoundComplete()) {
+      this.runShowdown();
+      return true;
+    }
+    return false;
+  }
+
+  /** Server-side timeout — auto-check if free, else fold */
   checkTurnTimeout(): boolean {
     if (!this.isBettingPhase() || !this.turnStartedAt) return false;
 
@@ -410,6 +563,19 @@ export class DemoRoomEngine {
     }
 
     player.timeBankMs = 0;
+
+    if (player.roundBet >= this.currentBet) {
+      player.hasActed = true;
+      if (this.countContenders() <= 1) {
+        this.awardSingleWinner();
+        return true;
+      }
+      this.advanceTurn();
+      this.tryAdvanceStreet();
+      this.tryRunOutBoard();
+      return true;
+    }
+
     player.status = "folded";
     player.hasActed = true;
     this.activeCount--;
@@ -421,6 +587,7 @@ export class DemoRoomEngine {
 
     this.advanceTurn();
     this.tryAdvanceStreet();
+    this.tryRunOutBoard();
     return true;
   }
 
@@ -434,6 +601,12 @@ export class DemoRoomEngine {
       return { ok: false, error: "No active hand" };
     }
     if (player.seat !== this.currentTurnSeat) return { ok: false, error: "Not your turn" };
+    if (player.status === "folded") {
+      return { ok: false, error: "You folded this hand" };
+    }
+    if (player.status === "allIn") {
+      return { ok: false, error: "You're all-in — waiting for the board" };
+    }
     if (player.status !== "active") return { ok: false, error: "Cannot act" };
 
     this.applyTimeBankCost(player);
@@ -485,6 +658,7 @@ export class DemoRoomEngine {
 
     this.advanceTurn();
     this.tryAdvanceStreet();
+    this.tryRunOutBoard();
     return { ok: true };
   }
 
@@ -545,7 +719,11 @@ export class DemoRoomEngine {
 
   private advanceTurn(): void {
     const next = this.nextActiveTurnSeat(this.currentTurnSeat);
-    if (next !== null) this.setCurrentTurnSeat(next);
+    if (next !== null) {
+      this.setCurrentTurnSeat(next);
+      return;
+    }
+    if (this.isBettingPhase()) this.tryAdvanceStreet();
   }
 
   private bettingRoundComplete(): boolean {
@@ -730,7 +908,8 @@ export class DemoRoomEngine {
       .sort((a, b) => a.seat - b.seat)
       .map((p) => {
         const hideCards =
-          !showAllCards && p.sessionId !== forSessionId && p.status !== "folded";
+          this.phase === "waiting" ||
+          (!showAllCards && p.sessionId !== forSessionId && p.status !== "folded");
         return {
           sessionId: p.sessionId,
           username: p.username,
@@ -833,6 +1012,7 @@ export class DemoRoomEngine {
     this.spectators = new Map(s.spectators.map((x) => [x.sessionId, x]));
     this.seatToSession = [...s.seatToSession];
     this.stateListeners = new Set();
+    this.reconcileSeats();
   }
 
   static fromSnapshot(s: DemoRoomSnapshot): DemoRoomEngine {

@@ -22,12 +22,31 @@ import { playerAvatarUrl } from "@/lib/avatars";
 import { DEMO_BIG_BLIND, DEMO_ROOM_ID, DEMO_SMALL_BLIND } from "@/lib/demo/constants";
 import { sessionToPubkey } from "@/lib/demo/ids";
 import { handRankLabel } from "@/lib/handNames";
-import type { useDemoGame } from "@/hooks/useDemoGame";
+import type { DemoAction, DemoRole, DemoRoomView } from "@/lib/demo/types";
+import type { ChatMessage } from "@/hooks/useSocket";
 import { useTurnTimer } from "@/hooks/useTurnTimer";
 import { useHandRewards } from "@/hooks/useHandRewards";
 import { useHandWinCelebration } from "@/hooks/useHandWinCelebration";
 
-type DemoGame = ReturnType<typeof useDemoGame>;
+export type DemoTableGame = {
+  connected: boolean;
+  view: DemoRoomView | null;
+  sessionId: string | null;
+  roomId?: string;
+  role: DemoRole | null;
+  username: string;
+  joinNotice: string | null;
+  messages: ChatMessage[];
+  actionPending: boolean;
+  leaveSeat: () => Promise<void>;
+  takeSeat: () => Promise<void>;
+  setSitOut: (sitOut: boolean) => Promise<{ ok: boolean; error?: string }>;
+  sendAction: (action: DemoAction) => Promise<{ ok: boolean; error?: string }>;
+  sendMessage: (text: string, avatar?: string) => Promise<void>;
+  socket: React.RefObject<import("socket.io-client").Socket | null>;
+  seatDesync?: boolean;
+  reconnectSeat?: () => Promise<void>;
+};
 
 export default function DemoTableGameView({
   game,
@@ -37,7 +56,7 @@ export default function DemoTableGameView({
   roomId: roomIdOverride,
   hideChat = false,
 }: {
-  game: DemoGame;
+  game: DemoTableGame;
   tableTitle?: string;
   buyInLabel?: string;
   blindsLabel?: string;
@@ -48,11 +67,14 @@ export default function DemoTableGameView({
     connected,
     view,
     sessionId,
+    roomId: gameRoomId,
     role,
     username,
     joinNotice,
     messages,
     actionPending,
+    seatDesync = false,
+    reconnectSeat = async () => {},
     leaveSeat,
     takeSeat,
     setSitOut,
@@ -60,6 +82,8 @@ export default function DemoTableGameView({
     sendMessage,
     socket,
   } = game;
+
+  const activeRoomId = roomIdOverride ?? gameRoomId ?? DEMO_ROOM_ID;
 
   const [betAmount, setBetAmount] = useState(0);
   const [dealCountdown, setDealCountdown] = useState<number | null>(null);
@@ -80,12 +104,14 @@ export default function DemoTableGameView({
   const avatarOverrides = view ? demoAvatarOverrides(view) : {};
   const sittingOutOverrides = view ? demoSittingOutOverrides(view) : {};
 
-  const myPlayer = myPubkey
-    ? players.find((p) => p.wallet.equals(myPubkey))
-    : undefined;
   const myDemoPlayer = sessionId
     ? view?.players.find((p) => p.sessionId === sessionId)
     : undefined;
+  const myPlayer = myDemoPlayer
+    ? players.find((p) => p.seat === myDemoPlayer.seat)
+    : myPubkey
+      ? players.find((p) => p.wallet.equals(myPubkey))
+      : undefined;
 
   useHandRewards({
     handNumber: view?.handNumber,
@@ -96,6 +122,7 @@ export default function DemoTableGameView({
 
   const isMyTurn =
     myPlayer &&
+    myDemoPlayer?.status === "active" &&
     room &&
     room.currentTurnSeat === myPlayer.seat &&
     room.phase !== "waiting";
@@ -134,10 +161,13 @@ export default function DemoTableGameView({
   }, [view?.turnStartedAt, view?.currentTurnSeat, view?.phase]);
 
   useEffect(() => {
-    if (!expired || !isMyTurn || !myPlayer || actionPending || autoFoldSent.current) return;
+    if (!expired || !isMyTurn || !myPlayer || !room || actionPending || autoFoldSent.current) {
+      return;
+    }
     autoFoldSent.current = true;
-    runAction({ type: "fold" });
-  }, [expired, isMyTurn, myPlayer, actionPending]);
+    const canCheck = myPlayer.roundBet >= room.currentBet;
+    void runAction(canCheck ? { type: "check" } : { type: "fold" });
+  }, [expired, isMyTurn, myPlayer, room, actionPending]);
 
   const spectatorCount = view?.spectators.length ?? 0;
   const isFull = (view?.playerCount ?? 0) >= 6;
@@ -204,6 +234,18 @@ export default function DemoTableGameView({
 
   const topBanner = (
     <>
+      {seatDesync && (
+        <div className="mx-4 mt-2 flex flex-wrap items-center justify-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+          <span>Your seat lost sync — reconnect to play.</span>
+          <button
+            type="button"
+            onClick={() => void reconnectSeat()}
+            className="rounded-md bg-amber-500/20 px-2.5 py-1 font-semibold text-amber-50 hover:bg-amber-500/30"
+          >
+            Reconnect seat
+          </button>
+        </div>
+      )}
       {joinNotice && (
         <div className="mx-4 mt-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
           {joinNotice}
@@ -264,7 +306,7 @@ export default function DemoTableGameView({
       buyInLabel={buyInLabel ?? `100K play ${TOKEN_SYMBOL}`}
       playerCount={view.playerCount}
       userLabel={username}
-      stack={myPlayer?.stack ?? 100_000_000_000}
+      stack={myPlayer?.stack ?? myDemoPlayer?.stack ?? 100_000_000_000}
       topBanner={topBanner}
       tableArea={
         <PokerTable
@@ -277,6 +319,9 @@ export default function DemoTableGameView({
           potWin={potWin}
           heroHandLabel={heroHandLabel}
           fairnessMode="demo"
+          actingTimeBankMs={
+            view.players.find((p) => p.seat === room.currentTurnSeat)?.timeBankMs ?? 0
+          }
         />
       }
       actionBar={
@@ -312,7 +357,7 @@ export default function DemoTableGameView({
             connected={connected}
             messages={messages}
             wallet={sessionId}
-            roomId={roomIdOverride ?? DEMO_ROOM_ID}
+            roomId={activeRoomId}
             socket={socket}
             onSend={(text) => sendMessage(text, playerAvatarUrl(username))}
           />
@@ -322,7 +367,7 @@ export default function DemoTableGameView({
         <TableRightPanel
           variant="demo"
           phase={room.phase}
-          roomPubkey={DEMO_ROOM_ID}
+          roomPubkey={activeRoomId}
           playerCount={view.playerCount}
           spectatorCount={spectatorCount}
           spectatorNames={view.spectators.map((s) => s.username)}

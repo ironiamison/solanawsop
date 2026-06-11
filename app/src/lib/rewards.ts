@@ -165,18 +165,72 @@ export async function recordHandPlayedReward(
 
 export async function awardTwitterVerification(
   userId: string
-): Promise<{ awarded: boolean; points?: number }> {
-  const dup = await prisma.rewardEvent.findFirst({
+): Promise<{ awarded: boolean; points?: number; repaired?: boolean }> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { twitterHandle: true, rewardPoints: true },
+  });
+  if (!user?.twitterHandle) return { awarded: false };
+
+  const existing = await prisma.rewardEvent.findFirst({
     where: { userId, type: "twitter_verified" },
   });
-  if (dup) return { awarded: false };
+
+  if (existing) {
+    const full = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        rewardPoints: true,
+        playRewardPoints: true,
+        referralRewardPoints: true,
+      },
+    });
+    if (!full) return { awarded: false };
+
+    const data: {
+      rewardPoints?: { increment: number };
+      playRewardPoints?: { decrement: number };
+    } = {};
+    let repaired = false;
+
+    if (full.rewardPoints < REWARD_POINTS.TWITTER_VERIFY) {
+      data.rewardPoints = {
+        increment: REWARD_POINTS.TWITTER_VERIFY - full.rewardPoints,
+      };
+      repaired = true;
+    }
+
+    const profilePts =
+      full.rewardPoints - full.playRewardPoints - full.referralRewardPoints;
+    if (
+      full.playRewardPoints >= REWARD_POINTS.TWITTER_VERIFY &&
+      profilePts < REWARD_POINTS.TWITTER_VERIFY
+    ) {
+      data.playRewardPoints = {
+        decrement: Math.min(
+          REWARD_POINTS.TWITTER_VERIFY,
+          full.playRewardPoints
+        ),
+      };
+      repaired = true;
+    }
+
+    if (repaired) {
+      await prisma.user.update({ where: { id: userId }, data });
+      return {
+        awarded: true,
+        points: REWARD_POINTS.TWITTER_VERIFY,
+        repaired: true,
+      };
+    }
+    return { awarded: false };
+  }
 
   await prisma.$transaction([
     prisma.user.update({
       where: { id: userId },
       data: {
         rewardPoints: { increment: REWARD_POINTS.TWITTER_VERIFY },
-        playRewardPoints: { increment: REWARD_POINTS.TWITTER_VERIFY },
       },
     }),
     prisma.rewardEvent.create({
@@ -184,6 +238,7 @@ export async function awardTwitterVerification(
         userId,
         type: "twitter_verified",
         points: REWARD_POINTS.TWITTER_VERIFY,
+        meta: JSON.stringify({ source: "twitter_verify" }),
       },
     }),
   ]);

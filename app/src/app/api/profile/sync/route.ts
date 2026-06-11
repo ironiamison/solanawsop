@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { ensureDatabase } from "@/lib/db-init";
+import { twitterFromPrivy, upsertUserFromPrivy } from "@/lib/privy-user-sync";
 import { verifyPrivyToken } from "@/lib/privy-server";
 import {
   applyReferralCode,
@@ -18,53 +19,9 @@ export async function POST(req: Request) {
     await ensureDatabase();
 
     const body = await req.json().catch(() => ({}));
-    const walletFromClient = (body as { walletAddress?: string }).walletAddress;
     const pendingReferral = (body as { referralCode?: string }).referralCode;
 
-    const twitter = privyUser.linkedAccounts?.find(
-      (a) => a.type === "twitter_oauth"
-    );
-    const twitterHandle =
-      twitter && "username" in twitter
-        ? twitter.username?.toLowerCase()
-        : null;
-    const twitterId =
-      twitter && "subject" in twitter ? twitter.subject : null;
-    const twitterName =
-      (twitter && "name" in twitter && twitter.name) ||
-      privyUser.twitter?.name ||
-      undefined;
-    const twitterImage =
-      (twitter && "profilePictureUrl" in twitter && twitter.profilePictureUrl) ||
-      privyUser.twitter?.profilePictureUrl ||
-      undefined;
-
-    const solanaWallet = privyUser.linkedAccounts?.find(
-      (a) => a.type === "wallet" && "chainType" in a && a.chainType === "solana"
-    );
-    const linkedWallet =
-      solanaWallet && "address" in solanaWallet ? solanaWallet.address : null;
-
-    const walletAddress = walletFromClient ?? linkedWallet ?? null;
-
-    const user = await prisma.user.upsert({
-      where: { privyUserId: privyUser.id },
-      create: {
-        privyUserId: privyUser.id,
-        twitterHandle,
-        twitterId: twitterId ?? undefined,
-        name: twitterName,
-        image: twitterImage,
-        walletAddress: walletAddress ?? undefined,
-      },
-      update: {
-        twitterHandle: twitterHandle ?? undefined,
-        twitterId: twitterId ?? undefined,
-        name: twitterName,
-        image: twitterImage,
-        ...(walletAddress ? { walletAddress } : {}),
-      },
-    });
+    const user = await upsertUserFromPrivy(privyUser);
 
     await ensureReferralCode(user.id);
 
@@ -72,18 +29,24 @@ export async function POST(req: Request) {
       await applyReferralCode(user.id, pendingReferral);
     }
 
+    const { twitterHandle } = twitterFromPrivy(privyUser);
     let twitterReward: { awarded: boolean; points?: number } | null = null;
     if (twitterHandle) {
       twitterReward = await awardTwitterVerification(user.id);
     }
 
     const fresh = await prisma.user.findUnique({ where: { id: user.id } });
-    return NextResponse.json({ user: fresh, twitterReward });
+    return NextResponse.json({
+      user: fresh,
+      twitterReward,
+      pointsAwarded: twitterReward?.awarded ? twitterReward.points : undefined,
+    });
   } catch (e) {
     console.error("[profile/sync]", e);
-    return NextResponse.json(
-      { error: "Could not save profile. Try again in a moment." },
-      { status: 503 }
-    );
+    const message =
+      e instanceof Error && e.message.includes("Unique constraint")
+        ? "Profile conflict — refresh and try again."
+        : "Could not save profile. Try again in a moment.";
+    return NextResponse.json({ error: message }, { status: 503 });
   }
 }

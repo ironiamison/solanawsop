@@ -1,6 +1,6 @@
 import { copyFileSync, existsSync } from "fs";
 import { join } from "path";
-import { prisma } from "@/lib/db";
+import { getPrismaClient } from "@/lib/db";
 
 const globalInit = globalThis as unknown as { dbReady?: Promise<void> };
 
@@ -34,6 +34,7 @@ export async function ensureDatabase(): Promise<void> {
     const url = databaseUrl();
     process.env.DATABASE_URL = url;
     seedVercelDatabase();
+    const prisma = getPrismaClient();
     await prisma.$connect();
     await prisma.user.count();
   })();

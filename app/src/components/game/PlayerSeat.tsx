@@ -27,11 +27,14 @@ function actionLabel(
   inHand: boolean,
   formatAmount: (n: number) => string
 ): string | null {
-  if (!inHand) return "CHECK";
+  if (!inHand) return null;
   if (player.status === "folded") return "FOLD";
   if (player.status === "allIn") return "ALL IN";
-  if (player.roundBet === 0 && currentBet === 0) return "CHECK";
-  if (player.roundBet > 0) return `BET ${formatAmount(player.roundBet)}`;
+  if (player.roundBet >= currentBet) return "CHECK";
+  if (player.roundBet > 0) {
+    return `CALL ${formatAmount(Math.max(0, currentBet - player.roundBet))}`;
+  }
+  if (currentBet > 0) return `CALL ${formatAmount(currentBet)}`;
   return null;
 }
 

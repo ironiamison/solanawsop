@@ -34,3 +34,5 @@ export function validateUsername(raw: string): string | null {
 }
 
 export const DEMO_SESSION_STORAGE_KEY = "poker-demo-session";
+export const DEMO_ROOM_STORAGE_KEY = "poker-demo-room";
+export const DEMO_USERNAME_STORAGE_KEY = "poker-demo-username";

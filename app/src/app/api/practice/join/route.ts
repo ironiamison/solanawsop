@@ -16,6 +16,7 @@ export async function POST(req: Request) {
     ...body,
     startStack: DEMO_START_STACK,
     onJoined: (room, _sessionId, role) => {
+      room.repairLobbyState();
       if (role === "player") ensurePracticeBots(room);
     },
   });

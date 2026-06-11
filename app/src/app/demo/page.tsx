@@ -9,7 +9,18 @@ import { useDemoGame } from "@/hooks/useDemoGame";
 
 export default function DemoPage() {
   const game = useDemoGame();
-  const { join, joinError, sessionId, joining, connected, lobbyStats } = game;
+  const {
+    join,
+    quickJoin,
+    joinError,
+    sessionId,
+    joining,
+    connected,
+    lobbyStats,
+    tables,
+    selectedRoomId,
+    setSelectedRoomId,
+  } = game;
   const [name, setName] = useState("");
   const minLoadingDone = useMinLoadingDuration(undefined, sessionId);
 
@@ -30,19 +41,28 @@ export default function DemoPage() {
         connected={connected}
         joining={joining}
         error={joinError}
+        tables={tables}
+        selectedRoomId={selectedRoomId}
+        onSelectRoom={setSelectedRoomId}
         lobbyStats={lobbyStats}
-        onJoin={() => join(name, true)}
-        onSpectate={() => join(name, false)}
+        onJoin={() => join(name, !lobbyStats.isFull, selectedRoomId)}
+        onSpectate={() => join(name, false, selectedRoomId)}
+        onQuickJoin={() => quickJoin(name)}
       />
     );
   }
+
+  const playersOnline = tables.reduce(
+    (sum, t) => sum + t.playerCount + t.spectators,
+    lobbyStats.playerCount + lobbyStats.spectators
+  );
 
   if (!game.view || !minLoadingDone) {
     return (
       <LoadingLobby
         subtitle="Connecting to the demo table and syncing your seat…"
-        playersOnline={lobbyStats.playerCount + lobbyStats.spectators}
-        tablesActive={1}
+        playersOnline={playersOnline}
+        tablesActive={tables.length || 1}
       />
     );
   }

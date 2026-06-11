@@ -9,6 +9,9 @@ const globalMem = globalThis as unknown as {
   __chipRooms?: Map<string, DemoRoomEngine>;
 };
 
+const LOCK_WAIT_MS = 5_000;
+const LOCK_TTL_SEC = 8;
+
 function getRedis(): Redis | null {
   const url =
     process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL ?? "";
@@ -24,7 +27,37 @@ export function chipRoomStoreUsesRedis(): boolean {
 
 export function chipRoomStorageKey(roomId: string): string {
   if (roomId === DEMO_ROOM_ID) return "solanawsop:demo:room";
+  if (roomId.startsWith("demo-playroom")) {
+    return `solanawsop:demo:room:${roomId}`;
+  }
   return `solanawsop:chip-room:${roomId}`;
+}
+
+function lockKey(roomId: string): string {
+  return `solanawsop:lock:${roomId}`;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function acquireLock(redis: Redis, roomId: string): Promise<boolean> {
+  const key = lockKey(roomId);
+  const deadline = Date.now() + LOCK_WAIT_MS;
+  while (Date.now() < deadline) {
+    const ok = await redis.set(key, "1", { nx: true, ex: LOCK_TTL_SEC });
+    if (ok === "OK") return true;
+    await sleep(40);
+  }
+  return false;
+}
+
+async function releaseLock(redis: Redis, roomId: string): Promise<void> {
+  try {
+    await redis.del(lockKey(roomId));
+  } catch {
+    // expires automatically
+  }
 }
 
 function memoryRooms(): Map<string, DemoRoomEngine> {
@@ -40,7 +73,10 @@ export async function loadChipRoom(
   if (!redis) {
     const mem = memoryRooms();
     const existing = mem.get(roomId);
-    if (existing) return existing;
+    if (existing) {
+      existing.repairLobbyState();
+      return existing;
+    }
     const room = new DemoRoomEngine({ roomId, startStack: opts?.startStack });
     mem.set(roomId, room);
     return room;
@@ -48,12 +84,16 @@ export async function loadChipRoom(
 
   const key = chipRoomStorageKey(roomId);
   const snap = await redis.get<DemoRoomSnapshot>(key);
-  if (snap) return DemoRoomEngine.fromSnapshot(snap);
-  return new DemoRoomEngine({ roomId, startStack: opts?.startStack });
+  const room = snap
+    ? DemoRoomEngine.fromSnapshot(snap)
+    : new DemoRoomEngine({ roomId, startStack: opts?.startStack });
+  room.repairLobbyState();
+  return room;
 }
 
 export async function saveChipRoom(room: DemoRoomEngine): Promise<void> {
   const redis = getRedis();
+  room.reconcileSeats();
   if (!redis) {
     memoryRooms().set(room.roomId, room);
     return;
@@ -66,9 +106,28 @@ export async function withChipRoom<T>(
   fn: (room: DemoRoomEngine) => T | Promise<T>,
   opts?: { startStack?: number }
 ): Promise<T> {
-  const room = await loadChipRoom(roomId, opts);
-  room.tick();
-  const result = await fn(room);
-  await saveChipRoom(room);
-  return result;
+  const redis = getRedis();
+  if (!redis) {
+    const room = await loadChipRoom(roomId, opts);
+    room.tick();
+    const result = await fn(room);
+    room.reconcileSeats();
+    await saveChipRoom(room);
+    return result;
+  }
+
+  const locked = await acquireLock(redis, roomId);
+  if (!locked) {
+    throw new Error("Table busy — try again");
+  }
+
+  try {
+    const room = await loadChipRoom(roomId, opts);
+    room.tick();
+    const result = await fn(room);
+    await saveChipRoom(room);
+    return result;
+  } finally {
+    await releaseLock(redis, roomId);
+  }
 }

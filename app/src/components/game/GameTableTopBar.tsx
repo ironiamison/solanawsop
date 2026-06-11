@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePrivy } from "@privy-io/react-auth";
 import BrandChipMark from "@/components/brand/BrandChipMark";
-import { SOLANA_NETWORK } from "@/lib/constants";
+import { SHOW_NETWORK_BADGE, SOLANA_NETWORK } from "@/lib/constants";
 
 export default function GameTableTopBar({
   tableTitle,
@@ -51,13 +51,15 @@ export default function GameTableTopBar({
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
-        <button
-          type="button"
-          className="opoker-network-btn hidden items-center gap-1.5 sm:flex"
-        >
-          <span className="opoker-network-dot" />
-          {SOLANA_NETWORK}
-        </button>
+        {SHOW_NETWORK_BADGE && (
+          <button
+            type="button"
+            className="opoker-network-btn hidden items-center gap-1.5 sm:flex"
+          >
+            <span className="opoker-network-dot" />
+            {SOLANA_NETWORK}
+          </button>
+        )}
 
         <div className="opoker-wallet-chip flex items-center gap-1.5 py-1 pl-1 pr-2.5">
           {userAvatar ? (

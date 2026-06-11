@@ -7,6 +7,7 @@ import BrandWordLockup from "@/components/brand/BrandWordLockup";
 import LobbyAssetImage from "@/components/home/LobbyAssetImage";
 import { validateUsername, normalizeUsername } from "@/lib/demo/ids";
 import { DEMO_MAX_PLAYERS } from "@/lib/demo/constants";
+import type { DemoTableInfo } from "@/lib/demo/types";
 
 export type DemoLobbyStats = {
   playerCount: number;
@@ -15,34 +16,54 @@ export type DemoLobbyStats = {
   maxPlayers: number;
 };
 
+function phaseLabel(phase: DemoTableInfo["phase"]): string {
+  if (phase === "waiting") return "Waiting";
+  if (phase === "showdown") return "Showdown";
+  return phase.replace(/-/g, " ");
+}
+
 export default function DemoJoinScreen({
   name,
   onNameChange,
   connected,
   joining,
   error,
+  tables,
+  selectedRoomId,
+  onSelectRoom,
   lobbyStats,
   onJoin,
   onSpectate,
+  onQuickJoin,
 }: {
   name: string;
   onNameChange: (v: string) => void;
   connected: boolean;
   joining: boolean;
   error: string | null;
+  tables: DemoTableInfo[];
+  selectedRoomId: string | null;
+  onSelectRoom: (roomId: string) => void;
   lobbyStats: DemoLobbyStats;
   onJoin: () => void;
   onSpectate: () => void;
+  onQuickJoin: () => void;
 }) {
   const normalized = normalizeUsername(name);
   const isValid = validateUsername(name) !== null;
 
+  const selectedTable =
+    tables.find((t) => t.roomId === selectedRoomId) ?? tables[0] ?? null;
+  const openTables = tables.filter((t) => !t.isFull);
+  const allFull = tables.length > 0 && openTables.length === 0;
+
   const statusText = useMemo(() => {
     if (joining) return "Joining table";
     if (!connected) return "Connecting to server";
-    if (lobbyStats.isFull) return "Table full — spectate for now";
+    if (selectedTable?.isFull) return "Table full — spectate or pick another";
+    if (allFull) return "All tables full — quick join opens a new table";
     return "Ready to join";
-  }, [joining, connected, lobbyStats.isFull]);
+  }, [joining, connected, selectedTable?.isFull, allFull]);
 
   return (
     <div className="demo-join-page relative min-h-screen overflow-hidden">
@@ -67,7 +88,7 @@ export default function DemoJoinScreen({
       </Link>
 
       <div className="relative z-10 flex min-h-screen items-center justify-center p-4 sm:p-8">
-        <div className="demo-join-shell w-full max-w-[440px]">
+        <div className="demo-join-shell w-full max-w-[480px]">
           <header className="demo-join-brand">
             <BrandWordLockup size="lg" priority showTagline />
           </header>
@@ -85,12 +106,67 @@ export default function DemoJoinScreen({
                   {connected ? "Live" : "Connecting"}
                 </span>
               </div>
-              <h1 className="demo-join-title">Free play table</h1>
+              <h1 className="demo-join-title">Free play lobby</h1>
               <p className="demo-join-sub">
-                Pick a username, sit at the shared 6-max table, and play with fake
-                chips. Chat and voice enabled — spectate when full.
+                Pick a table or quick join the first open seat. New tables only
+                open when every table is full.
               </p>
             </div>
+
+            {tables.length > 0 && (
+              <div className="mb-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="demo-join-label mb-0">Tables</p>
+                  <button
+                    type="button"
+                    onClick={onQuickJoin}
+                    disabled={!isValid || joining || !connected}
+                    className="text-[11px] font-medium text-violet-400 hover:text-violet-300 disabled:opacity-40"
+                  >
+                    Quick join →
+                  </button>
+                </div>
+                <ul className="max-h-44 space-y-1.5 overflow-y-auto pr-0.5">
+                  {tables.map((table) => {
+                    const selected = table.roomId === selectedTable?.roomId;
+                    return (
+                      <li key={table.roomId}>
+                        <button
+                          type="button"
+                          onClick={() => onSelectRoom(table.roomId)}
+                          className={`demo-join-input ui-surface-inset flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left transition ${
+                            selected
+                              ? "ring-1 ring-violet-500/50 bg-violet-500/5"
+                              : "hover:bg-white/[0.03]"
+                          }`}
+                        >
+                          <span className="min-w-0">
+                            <span className="block text-sm font-medium text-white">
+                              {table.label}
+                            </span>
+                            <span className="block text-[10px] capitalize text-zinc-500">
+                              {phaseLabel(table.phase)}
+                              {table.spectators > 0
+                                ? ` · ${table.spectators} watching`
+                                : ""}
+                            </span>
+                          </span>
+                          <span
+                            className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                              table.isFull
+                                ? "bg-zinc-700/60 text-zinc-400"
+                                : "bg-emerald-500/15 text-emerald-400"
+                            }`}
+                          >
+                            {table.playerCount}/{table.maxPlayers}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
 
             <div className="demo-join-form space-y-3">
               <div>
@@ -111,7 +187,9 @@ export default function DemoJoinScreen({
                     maxLength={20}
                     autoComplete="off"
                     className="min-w-0 flex-1 bg-transparent text-sm text-white placeholder:text-zinc-600 focus:outline-none"
-                    onKeyDown={(e) => e.key === "Enter" && isValid && !joining && onJoin()}
+                    onKeyDown={(e) =>
+                      e.key === "Enter" && isValid && !joining && connected && onJoin()
+                    }
                   />
                   {isValid && (
                     <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/20 text-xs text-emerald-400">
@@ -157,12 +235,12 @@ export default function DemoJoinScreen({
                   className="demo-join-btn-primary flex flex-1 items-center justify-center gap-2"
                 >
                   <SpadeIcon className="h-3.5 w-3.5" />
-                  Join table
+                  {selectedTable?.isFull ? "Join (spectate)" : "Join table"}
                 </button>
                 <button
                   type="button"
                   onClick={onSpectate}
-                  disabled={!isValid || joining || !connected}
+                  disabled={!isValid || joining || !connected || !selectedTable}
                   className="demo-join-btn-ghost flex items-center justify-center gap-1.5 px-5"
                 >
                   <EyeIcon className="h-3.5 w-3.5" />
@@ -180,16 +258,16 @@ export default function DemoJoinScreen({
               />
               <StatCell
                 icon={<UsersIcon className="h-4 w-4" />}
-                label="Players"
+                label={selectedTable ? selectedTable.label : "Players"}
                 value={`${lobbyStats.playerCount}/${DEMO_MAX_PLAYERS}`}
                 sub={lobbyStats.isFull ? "Table full" : "Seats open"}
                 highlight={!lobbyStats.isFull && lobbyStats.playerCount > 0}
               />
               <StatCell
                 icon={<ChatIcon />}
-                label="Social"
-                value="On"
-                sub="Chat & voice"
+                label="Tables"
+                value={String(tables.length || 1)}
+                sub={allFull ? "All full" : `${openTables.length} open`}
               />
             </div>
           </article>

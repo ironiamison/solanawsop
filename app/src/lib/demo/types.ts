@@ -73,3 +73,13 @@ export type DemoAction =
   | { type: "check" }
   | { type: "call" }
   | { type: "raise"; amount: number };
+
+export type DemoTableInfo = {
+  roomId: string;
+  label: string;
+  playerCount: number;
+  spectators: number;
+  isFull: boolean;
+  maxPlayers: number;
+  phase: GamePhase;
+};

@@ -1,88 +1,126 @@
 import type { Server, Socket } from "socket.io";
+import { withChipRoom } from "@/lib/chip-room/store";
 import { appendDemoChat } from "@/lib/demo/chat-store";
-import { DEMO_ROOM_ID } from "./constants";
 import { demoRoom } from "./engine";
-import { lobbyStatsFrom } from "./http-handlers";
+import {
+  getDemoRoomIds,
+  listDemoTables,
+  lobbyStatsFrom,
+  registerDemoRoom,
+  resolveDemoRoomForJoin,
+  resolveDemoRoomId,
+} from "./lobby-registry";
 import { newSessionId, validateUsername } from "./ids";
-import { demoStoreUsesRedis, withDemoRoom } from "./store";
+import { demoStoreUsesRedis } from "./store";
 import type { DemoAction } from "./types";
 import type { DemoRoomEngine } from "./engine";
 
-export function lobbyStats() {
-  return lobbyStatsFrom(demoRoom);
+function socketRoomId(socket: Socket): string | undefined {
+  return socket.data.demoRoomId as string | undefined;
 }
 
-function broadcast(io: Server, room: DemoRoomEngine): void {
+function broadcastRoom(io: Server, roomId: string, room: DemoRoomEngine): void {
   const stats = lobbyStatsFrom(room);
   for (const [, socket] of io.sockets.sockets) {
+    if (socketRoomId(socket) !== roomId) continue;
     const sessionId = socket.data.demoSessionId as string | undefined;
     if (sessionId) {
       socket.emit("demo-state", room.getView(sessionId));
     }
   }
-  io.to(DEMO_ROOM_ID).emit("demo-lobby-stats", stats);
+  io.to(roomId).emit("demo-lobby-stats", stats);
 }
 
 async function runRoom<T>(
   io: Server,
+  roomId: string,
   fn: (room: DemoRoomEngine) => T | Promise<T>
 ): Promise<T> {
-  if (demoStoreUsesRedis()) {
-    return withDemoRoom(async (room) => {
-      const result = await fn(room);
-      broadcast(io, room);
-      return result;
-    });
-  }
-  const result = await fn(demoRoom);
-  broadcast(io, demoRoom);
-  return result;
+  const id = await registerDemoRoom(roomId).then(() => roomId);
+  return withChipRoom(id, async (room) => {
+    const result = await fn(room);
+    broadcastRoom(io, id, room);
+    return result;
+  });
+}
+
+async function runSocketRoom<T>(
+  io: Server,
+  socket: Socket,
+  fn: (room: DemoRoomEngine) => T | Promise<T>
+): Promise<T | undefined> {
+  const roomId = socketRoomId(socket);
+  if (!roomId) return undefined;
+  return runRoom(io, roomId, fn);
 }
 
 export function wireDemoBroadcast(io: Server): void {
   if (!demoStoreUsesRedis()) {
-    demoRoom.onStateChange(() => broadcast(io, demoRoom));
+    demoRoom.onStateChange(() => broadcastRoom(io, demoRoom.roomId, demoRoom));
   }
+
   setInterval(() => {
-    if (demoStoreUsesRedis()) {
-      void withDemoRoom((room) => {
-        if (room.tick()) broadcast(io, room);
-      });
-      return;
-    }
-    if (demoRoom.tick()) broadcast(io, demoRoom);
-  }, 500);
+    void (async () => {
+      const ids = await getDemoRoomIds();
+      for (const roomId of ids) {
+        await withChipRoom(roomId, (room) => {
+          if (room.tick()) broadcastRoom(io, roomId, room);
+        });
+      }
+    })();
+  }, 1000);
+
+  setInterval(() => {
+    void listDemoTables().then((tables) => {
+      io.emit("demo-lobby-tables", { tables });
+    });
+  }, 5000);
 }
 
 export function attachDemoHandlers(socket: Socket, io: Server): void {
   socket.on("demo-peek", (ack?: (res: unknown) => void) => {
-    void runRoom(io, (room) => {
-      const stats = lobbyStatsFrom(room);
-      if (typeof ack === "function") ack(stats);
-      socket.emit("demo-lobby-stats", stats);
+    void listDemoTables().then((tables) => {
+      const payload = { tables };
+      if (typeof ack === "function") ack(payload);
+      socket.emit("demo-lobby-tables", payload);
     });
   });
 
   socket.on(
     "demo-sync",
-    (data: { sessionId?: string }, ack?: (res: unknown) => void) => {
+    (
+      data: { sessionId?: string; roomId?: string },
+      ack?: (res: unknown) => void
+    ) => {
       const sessionId = data?.sessionId;
-      void runRoom(io, (room) => {
-        if (!sessionId || !room.hasSession(sessionId)) {
-          const err = { ok: false, error: "Session not found — join again" };
-          if (typeof ack === "function") ack(err);
-          socket.emit("demo-join-result", err);
-          return err;
-        }
-        socket.join(DEMO_ROOM_ID);
-        socket.data.demoSessionId = sessionId;
-        socket.data.roomId = DEMO_ROOM_ID;
-        room.rebindSocket(sessionId, socket.id);
-        const result = { ok: true, sessionId, state: room.getView(sessionId) };
-        if (typeof ack === "function") ack(result);
-        socket.emit("demo-join-result", result);
-        socket.emit("demo-state", room.getView(sessionId));
-        return result;
+      if (!sessionId) {
+        const err = { ok: false, error: "Missing session" };
+        ack?.(err);
+        return;
+      }
+      void resolveDemoRoomId(sessionId, data?.roomId).then((roomId) => {
+        socket.join(roomId);
+        socket.data.demoRoomId = roomId;
+        socket.data.roomId = roomId;
+        void runRoom(io, roomId, (room) => {
+          if (!room.hasSession(sessionId)) {
+            const err = { ok: false, error: "Session not found — join again" };
+            ack?.(err);
+            socket.emit("demo-join-result", err);
+            return err;
+          }
+          room.rebindSocket(sessionId, socket.id);
+          const result = {
+            ok: true,
+            sessionId,
+            roomId,
+            state: room.getView(sessionId),
+          };
+          ack?.(result);
+          socket.emit("demo-join-result", result);
+          socket.emit("demo-state", room.getView(sessionId));
+          return result;
+        });
       });
     }
   );
@@ -90,63 +128,107 @@ export function attachDemoHandlers(socket: Socket, io: Server): void {
   socket.on(
     "demo-join",
     (
-      data: { username: string; sessionId?: string; preferPlayer?: boolean },
+      data: {
+        username: string;
+        sessionId?: string;
+        preferPlayer?: boolean;
+        roomId?: string;
+      },
       ack?: (res: unknown) => void
     ) => {
-      void runRoom(io, (room) => {
-        const username = validateUsername(data.username ?? "");
-        if (!username) {
-          const bad = { ok: false, error: "Username must be 2–16 letters, numbers, or _" };
-          if (typeof ack === "function") ack(bad);
-          socket.emit("demo-join-result", bad);
-          return bad;
-        }
-
-        const sessionId = data.sessionId || newSessionId();
-        if (room.usernameTaken(username, sessionId)) {
-          const taken = { ok: false, error: "Username already taken" };
-          if (typeof ack === "function") ack(taken);
-          socket.emit("demo-join-result", taken);
-          return taken;
-        }
-
-        socket.join(DEMO_ROOM_ID);
-        socket.data.demoSessionId = sessionId;
-        socket.data.roomId = DEMO_ROOM_ID;
-
-        const wantPlayer = data.preferPlayer !== false;
-        let role: "player" | "spectator" = "spectator";
-
-        if (wantPlayer && !room.isFull()) {
-          const result = room.joinAsPlayer(sessionId, username, socket.id);
-          if (result.ok) {
-            role = "player";
-          } else {
-            room.joinAsSpectator(sessionId, username, socket.id);
-          }
+      void (async () => {
+        const preferPlayer = data.preferPlayer !== false;
+        let roomId: string;
+        if (!preferPlayer && data.roomId) {
+          roomId = data.roomId;
+          await registerDemoRoom(roomId);
         } else {
-          room.joinAsSpectator(sessionId, username, socket.id);
-          if (wantPlayer && room.isFull()) {
-            const full = {
+          roomId = await resolveDemoRoomForJoin(data.roomId);
+        }
+
+        await runRoom(io, roomId, (room) => {
+          const username = validateUsername(data.username ?? "");
+          if (!username) {
+            const bad = {
+              ok: false,
+              error: "Username must be 2–16 letters, numbers, or _",
+            };
+            ack?.(bad);
+            socket.emit("demo-join-result", bad);
+            return bad;
+          }
+
+          const sessionId = data.sessionId || newSessionId();
+
+          const reclaimed = room.reclaimSeatForUsername(sessionId, username);
+          if (reclaimed) {
+            socket.join(roomId);
+            socket.data.demoSessionId = sessionId;
+            socket.data.demoRoomId = roomId;
+            socket.data.roomId = roomId;
+            room.rebindSocket(sessionId, socket.id);
+            const ok = {
               ok: true,
               sessionId,
-              role: "spectator" as const,
+              roomId,
+              role: reclaimed,
               wallet: sessionId,
-              notice: "Table full — you're spectating. A seat opens when someone leaves.",
+              notice: "Reconnected to your seat",
             };
-            if (typeof ack === "function") ack(full);
-            socket.emit("demo-join-result", full);
+            ack?.(ok);
+            socket.emit("demo-join-result", ok);
             socket.emit("demo-state", room.getView(sessionId));
-            return full;
+            return ok;
           }
-        }
 
-        const ok = { ok: true, sessionId, role, wallet: sessionId };
-        if (typeof ack === "function") ack(ok);
-        socket.emit("demo-join-result", ok);
-        socket.emit("demo-state", room.getView(sessionId));
-        return ok;
-      });
+          if (room.usernameTaken(username, sessionId)) {
+            const taken = { ok: false, error: "Username already taken" };
+            ack?.(taken);
+            socket.emit("demo-join-result", taken);
+            return taken;
+          }
+
+          socket.join(roomId);
+          socket.data.demoSessionId = sessionId;
+          socket.data.demoRoomId = roomId;
+          socket.data.roomId = roomId;
+
+          const wantPlayer = preferPlayer;
+          let role: "player" | "spectator" = "spectator";
+
+          if (wantPlayer && !room.isFull()) {
+            const result = room.joinAsPlayer(sessionId, username, socket.id);
+            if (result.ok) {
+              role = "player";
+            } else {
+              room.joinAsSpectator(sessionId, username, socket.id);
+            }
+          } else {
+            room.joinAsSpectator(sessionId, username, socket.id);
+            if (wantPlayer && room.isFull()) {
+              const full = {
+                ok: true,
+                sessionId,
+                roomId,
+                role: "spectator" as const,
+                wallet: sessionId,
+                notice:
+                  "Table full — you're spectating. A seat opens when someone leaves.",
+              };
+              ack?.(full);
+              socket.emit("demo-join-result", full);
+              socket.emit("demo-state", room.getView(sessionId));
+              return full;
+            }
+          }
+
+          const ok = { ok: true, sessionId, roomId, role, wallet: sessionId };
+          ack?.(ok);
+          socket.emit("demo-join-result", ok);
+          socket.emit("demo-state", room.getView(sessionId));
+          return ok;
+        });
+      })();
     }
   );
 
@@ -156,7 +238,7 @@ export function attachDemoHandlers(socket: Socket, io: Server): void {
       ack?.({ ok: false, error: "Not in demo" });
       return;
     }
-    void runRoom(io, (room) => {
+    void runSocketRoom(io, socket, (room) => {
       const seated = room.findPlayer(sessionId);
       const username = seated?.username ?? "Guest";
       const result = room.leaveSeat(sessionId);
@@ -176,7 +258,7 @@ export function attachDemoHandlers(socket: Socket, io: Server): void {
       ack?.({ ok: false, error: "Not in demo" });
       return;
     }
-    void runRoom(io, (room) => {
+    void runSocketRoom(io, socket, (room) => {
       const view = room.getView();
       const spec = view.spectators.find((s) => s.sessionId === sessionId);
       const username = spec?.username ?? "Guest";
@@ -196,7 +278,7 @@ export function attachDemoHandlers(socket: Socket, io: Server): void {
       ack?.({ ok: false, error: "Must be seated" });
       return;
     }
-    void runRoom(io, (room) => {
+    void runSocketRoom(io, socket, (room) => {
       if (!room.findPlayer(sessionId)) {
         ack?.({ ok: false, error: "Must be seated" });
         return { ok: false, error: "Must be seated" };
@@ -213,7 +295,7 @@ export function attachDemoHandlers(socket: Socket, io: Server): void {
       ack?.({ ok: false, error: "Must be seated" });
       return;
     }
-    void runRoom(io, (room) => {
+    void runSocketRoom(io, socket, (room) => {
       if (!room.findPlayer(sessionId)) {
         ack?.({ ok: false, error: "Must be seated" });
         return { ok: false, error: "Must be seated" };
@@ -230,7 +312,7 @@ export function attachDemoHandlers(socket: Socket, io: Server): void {
       ack?.({ ok: false, error: "Not in demo" });
       return;
     }
-    void runRoom(io, (room) => {
+    void runSocketRoom(io, socket, (room) => {
       const result = room.playerAction(sessionId, action);
       ack?.(result);
       return result;
@@ -238,8 +320,9 @@ export function attachDemoHandlers(socket: Socket, io: Server): void {
   });
 
   socket.on("disconnect", () => {
-    if (!socket.data.demoSessionId) return;
-    void runRoom(io, (room) => {
+    const roomId = socketRoomId(socket);
+    if (!roomId || !socket.data.demoSessionId) return;
+    void runRoom(io, roomId, (room) => {
       room.disconnect(socket.id);
     });
   });
