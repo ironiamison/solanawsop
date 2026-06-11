@@ -6569,55 +6569,6 @@ html:has(.lobby-shell) {
 }
 
 /* ── Getting started panel ── */
-.gs-collapsed {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.65rem 1.25rem;
-  border-radius: 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.02);
-  padding: 1rem 1.25rem;
-}
-
-.gs-collapsed-eyebrow {
-  width: 100%;
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: #c4b5fd;
-}
-
-@media (min-width: 640px) {
-  .gs-collapsed-eyebrow {
-    width: auto;
-  }
-}
-
-.gs-collapsed-heading {
-  flex: 1;
-  min-width: 0;
-  font-size: 1.25rem;
-  font-weight: 400;
-  letter-spacing: -0.02em;
-  color: #fafafa;
-}
-
-.gs-collapsed-btn {
-  border: none;
-  border-radius: 9999px;
-  padding: 0.5rem 1rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #ede9fe;
-  background: rgba(124, 58, 237, 0.2);
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-
-.gs-collapsed-btn:hover {
-  background: rgba(124, 58, 237, 0.32);
-}
-
 .gs-panel {
   position: relative;
   overflow: hidden;

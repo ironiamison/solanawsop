@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 
-export const GETTING_STARTED_STORAGE_KEY = "solanawsop_getting_started_dismissed";
+export const GETTING_STARTED_STORAGE_KEY = "solanawsop_getting_started_v2";
 const STORAGE_KEY = GETTING_STARTED_STORAGE_KEY;
 const DEMO_KEY = "solanawsop_demo_visited";
 
@@ -119,33 +119,23 @@ function StepTile({
 
 export default function GettingStartedCard() {
   const { authenticated, ready } = usePrivy();
-  const [dismissed, setDismissed] = useState(true);
+  const [dismissed, setDismissed] = useState<boolean | null>(null);
   const [demoDone, setDemoDone] = useState(false);
 
   useEffect(() => {
     try {
-      const wasDismissed = localStorage.getItem(STORAGE_KEY) === "1";
       const openFromHash = window.location.hash === "#getting-started";
+      const wasDismissed =
+        !openFromHash && localStorage.getItem(STORAGE_KEY) === "1";
       if (openFromHash) {
         localStorage.removeItem(STORAGE_KEY);
-        setDismissed(false);
-      } else {
-        setDismissed(wasDismissed);
       }
+      setDismissed(wasDismissed);
       setDemoDone(localStorage.getItem(DEMO_KEY) === "1");
     } catch {
       setDismissed(false);
     }
   }, []);
-
-  const restore = () => {
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      // ignore
-    }
-    setDismissed(false);
-  };
 
   const doneMap = useMemo(
     (): Record<StepId, boolean> => ({
@@ -160,19 +150,7 @@ export default function GettingStartedCard() {
   const completed = STEPS.filter((s) => doneMap[s.id]).length;
   const progress = Math.round((completed / STEPS.length) * 100);
 
-  if (!ready) return null;
-
-  if (dismissed) {
-    return (
-      <section id="getting-started" className="gs-collapsed mb-5 scroll-mt-24">
-        <p className="gs-collapsed-eyebrow">New here?</p>
-        <h2 className="gs-collapsed-heading font-display">Deal yourself in</h2>
-        <button type="button" onClick={restore} className="gs-collapsed-btn">
-          Show 4-step guide
-        </button>
-      </section>
-    );
-  }
+  if (!ready || dismissed === null || dismissed) return null;
 
   const dismiss = () => {
     try {
