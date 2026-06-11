@@ -4,11 +4,10 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import LobbyAssetImage from "@/components/home/LobbyAssetImage";
 import { BtnGhost, LobbyCard } from "@/components/home/lobby";
-import { TOKEN_SYMBOL, WEEKLY_TOURNAMENT } from "@/lib/constants";
+import { formatTokens, TOKEN_SYMBOL, WEEKLY_TOURNAMENT } from "@/lib/constants";
 import {
   allTournamentEvents,
   featuredEventCards,
-  formatCompactStat,
   formatCountdownHero,
   getFeaturedTournament,
   getGrandOpeningTournament,
@@ -62,13 +61,6 @@ function HeroSection({
   return (
     <section className="tourney-hero">
       <div className="tourney-hero-bg" aria-hidden />
-      <LobbyAssetImage
-        src="/assets/lobby/chips-floating-3d.png"
-        alt=""
-        width={200}
-        height={120}
-        className="tourney-hero-chips"
-      />
       <div className="tourney-hero-inner">
         <div className="tourney-hero-copy">
           <p className="tourney-hero-eyebrow">
@@ -108,17 +100,40 @@ function HeroSection({
   );
 }
 
+const FEATURED_CARD_BG: Partial<Record<string, string>> = {
+  hot: "/assets/lobby/tournament-hero-bg.png",
+  live: "/assets/lobby/tournament-live-bg.png",
+  upcoming: "/assets/lobby/tournament-upcoming-bg.png",
+};
+
 function FeaturedCard({ event }: { event: TournamentEvent }) {
+  const badge = event.featuredBadge;
+  const bgSrc = badge ? FEATURED_CARD_BG[badge] : undefined;
+  const cardMod = badge && FEATURED_CARD_BG[badge] ? ` tourney-featured-card--${badge}` : "";
+
   return (
-    <article className="tourney-featured-card">
-      <FeaturedBadge badge={event.featuredBadge} />
-      <h3 className="tourney-featured-card-title">{event.title}</h3>
-      <p className="tourney-featured-card-prize">{event.prizePool}</p>
-      <p className="tourney-featured-card-meta">
-        {event.status === "live" ? "Live now" : `Starts in ${event.startsIn ?? "—"}`}
-        {event.playersLabel !== "—" && ` · ${event.playersLabel}`}
-      </p>
-      <ComingSoonCta className="tourney-featured-card-btn" />
+    <article className={`tourney-featured-card${cardMod}`}>
+      {bgSrc && (
+        <>
+          <LobbyAssetImage
+            src={bgSrc}
+            alt=""
+            fill
+            className="tourney-featured-card-bg"
+            sizes="(max-width: 1024px) 100vw, 33vw"
+          />
+          <div className="tourney-featured-card-vignette" aria-hidden />
+        </>
+      )}
+      <div className="tourney-featured-card-content">
+        <FeaturedBadge badge={event.featuredBadge} />
+        <h3 className="tourney-featured-card-title">{event.title}</h3>
+        <p className="tourney-featured-card-prize">{event.prizePool}</p>
+        <p className="tourney-featured-card-meta">
+          {event.status === "live" ? "Live now" : `Starts in ${event.startsIn ?? "—"}`}
+        </p>
+        <ComingSoonCta className="tourney-featured-card-btn" />
+      </div>
     </article>
   );
 }
@@ -179,20 +194,21 @@ function HowItWorks() {
 }
 
 function PlatformStats({
-  handsPlayed,
   players,
+  otcPaidRaw,
 }: {
-  handsPlayed: number;
   players: number;
+  otcPaidRaw: string;
 }) {
-  const events = allTournamentEvents().length + 2340;
-  const prizePaid = formatCompactStat(Math.max(handsPlayed * 1200, 0), ` ${TOKEN_SYMBOL}`);
-
+  const prizePaid = BigInt(otcPaidRaw || "0");
   const stats = [
-    { label: "Total prize pool paid", value: prizePaid || `— ${TOKEN_SYMBOL}`, icon: "🏆" },
-    { label: "Total tournaments", value: events.toLocaleString(), icon: "🎰" },
+    {
+      label: "Total prize pool paid",
+      value: `${formatTokens(prizePaid)} ${TOKEN_SYMBOL}`,
+      icon: "🏆",
+    },
+    { label: "Total tournaments", value: "0", icon: "🎰" },
     { label: "Total players", value: players.toLocaleString(), icon: "👥" },
-    { label: "Average ROI (top 100)", value: "+278%", icon: "📈" },
   ];
 
   return (
@@ -214,7 +230,7 @@ function PlatformStats({
 
 export default function TournamentsPageContent() {
   const [regCountdown, setRegCountdown] = useState("");
-  const [platformStats, setPlatformStats] = useState({ handsPlayed: 0, players: 0 });
+  const [platformStats, setPlatformStats] = useState({ players: 0, otcPaidRaw: "0" });
 
   const featured = getFeaturedTournament();
   const cards = featuredEventCards();
@@ -237,8 +253,8 @@ export default function TournamentsPageContent() {
       .then((r) => r.json())
       .then((d) => {
         setPlatformStats({
-          handsPlayed: d.handsPlayed ?? 0,
-          players: Math.max(d.playersWithHands ?? 0, 1),
+          players: d.playersWithHands ?? 0,
+          otcPaidRaw: d.totalOtcPaidRaw ?? "0",
         });
       })
       .catch(() => {});
@@ -368,7 +384,7 @@ export default function TournamentsPageContent() {
         </aside>
       </div>
 
-      <PlatformStats handsPlayed={platformStats.handsPlayed} players={platformStats.players} />
+      <PlatformStats players={platformStats.players} otcPaidRaw={platformStats.otcPaidRaw} />
     </div>
   );
 }

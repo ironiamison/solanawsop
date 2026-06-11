@@ -6384,16 +6384,6 @@ body {
   pointer-events: none;
 }
 
-.tourney-hero-chips {
-  position: absolute;
-  right: 28%;
-  top: 8%;
-  width: auto !important;
-  height: 5rem !important;
-  opacity: 0.35;
-  pointer-events: none;
-}
-
 .tourney-hero-inner {
   position: relative;
   z-index: 1;
@@ -6402,6 +6392,20 @@ body {
   justify-content: space-between;
   gap: 1.5rem;
   padding: 1.75rem 2rem;
+}
+
+.tourney-hero-visual {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tourney-hero-trophy {
+  width: auto !important;
+  height: clamp(7rem, 14vw, 10rem) !important;
+  object-fit: contain;
+  filter: drop-shadow(0 16px 48px rgba(245, 158, 11, 0.4));
 }
 
 .tourney-hero-eyebrow {
@@ -6512,20 +6516,6 @@ body {
   letter-spacing: 0.08em !important;
 }
 
-.tourney-hero-visual {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.tourney-hero-trophy {
-  width: auto !important;
-  height: clamp(7rem, 14vw, 10rem) !important;
-  object-fit: contain;
-  filter: drop-shadow(0 16px 48px rgba(245, 158, 11, 0.4));
-}
-
 /* Featured cards row */
 .tourney-featured-grid {
   display: grid;
@@ -6535,10 +6525,55 @@ body {
 
 .tourney-featured-card {
   position: relative;
+  overflow: hidden;
   border-radius: 1rem;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(8, 6, 14, 0.9);
+}
+
+.tourney-featured-card-content {
+  position: relative;
+  z-index: 1;
   padding: 1.1rem 1.15rem 1rem;
+}
+
+.tourney-featured-card--hot {
+  border-color: rgba(139, 92, 246, 0.22);
+}
+
+.tourney-featured-card--live {
+  border-color: rgba(34, 197, 94, 0.2);
+}
+
+.tourney-featured-card--upcoming {
+  border-color: rgba(139, 92, 246, 0.18);
+}
+
+.tourney-featured-card-bg {
+  object-fit: cover;
+  object-position: 80% center;
+  opacity: 0.72;
+}
+
+.tourney-featured-card--live .tourney-featured-card-bg {
+  object-position: 65% center;
+}
+
+.tourney-featured-card--upcoming .tourney-featured-card-bg {
+  object-position: 50% 35%;
+}
+
+.tourney-featured-card-vignette {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(6, 4, 12, 0.32) 0%,
+    rgba(6, 4, 12, 0.62) 50%,
+    rgba(6, 4, 12, 0.78) 100%
+  );
+  pointer-events: none;
 }
 
 .tourney-card-badge {
@@ -6922,7 +6957,7 @@ body {
 /* Footer stats */
 .tourney-stats-bar {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1rem;
   border-radius: 1rem;
   border: 1px solid rgba(255, 255, 255, 0.06);
@@ -6979,16 +7014,16 @@ body {
     padding: 1.5rem;
   }
 
+  .tourney-hero-visual {
+    display: none;
+  }
+
   .tourney-hero-stats {
     justify-content: center;
   }
 
   .tourney-hero-actions {
     justify-content: center;
-  }
-
-  .tourney-hero-chips {
-    display: none;
   }
 }
 
