@@ -34,6 +34,22 @@ export async function fetchDemoJson<T>(
   }
 }
 
+function parseDemoResponse<T>(res: Response, raw: string): T {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    throw new Error(res.ok ? "Empty server response" : `Server error (${res.status})`);
+  }
+  try {
+    return JSON.parse(trimmed) as T;
+  } catch {
+    throw new Error(
+      res.status === 503
+        ? "Table busy — try again in a moment"
+        : `Server error (${res.status})`
+    );
+  }
+}
+
 export async function postDemoJson<T>(
   path: string,
   body: Record<string, unknown>,
@@ -48,7 +64,8 @@ export async function postDemoJson<T>(
       body: JSON.stringify(body),
       signal: controller.signal,
     });
-    return (await res.json()) as T;
+    const raw = await res.text();
+    return parseDemoResponse<T>(res, raw);
   } catch (err) {
     if (err instanceof Error && err.name === "AbortError") {
       throw new Error("Request timed out");

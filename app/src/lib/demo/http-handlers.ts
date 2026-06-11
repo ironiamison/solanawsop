@@ -113,6 +113,7 @@ export async function handleDemoJoin(body: {
         role = "player";
       } else {
         room.joinAsSpectator(sessionId, username, placeholderSocket);
+        notice = result.error;
       }
     } else {
       room.joinAsSpectator(sessionId, username, placeholderSocket);

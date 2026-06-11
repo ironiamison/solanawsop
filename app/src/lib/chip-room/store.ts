@@ -9,8 +9,9 @@ const globalMem = globalThis as unknown as {
   __chipRooms?: Map<string, DemoRoomEngine>;
 };
 
-const LOCK_WAIT_MS = 5_000;
-const LOCK_TTL_SEC = 8;
+const LOCK_WAIT_MS = 12_000;
+const LOCK_TTL_SEC = 15;
+const LOCK_ATTEMPTS = 2;
 
 function getRedis(): Redis | null {
   const url =
@@ -116,18 +117,28 @@ export async function withChipRoom<T>(
     return result;
   }
 
-  const locked = await acquireLock(redis, roomId);
-  if (!locked) {
-    throw new Error("Table busy — try again");
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < LOCK_ATTEMPTS; attempt++) {
+    const locked = await acquireLock(redis, roomId);
+    if (!locked) {
+      lastError = new Error("Table busy — try again");
+      if (attempt + 1 < LOCK_ATTEMPTS) {
+        await sleep(120 + attempt * 180);
+        continue;
+      }
+      throw lastError;
+    }
+
+    try {
+      const room = await loadChipRoom(roomId, opts);
+      room.tick();
+      const result = await fn(room);
+      await saveChipRoom(room);
+      return result;
+    } finally {
+      await releaseLock(redis, roomId);
+    }
   }
 
-  try {
-    const room = await loadChipRoom(roomId, opts);
-    room.tick();
-    const result = await fn(room);
-    await saveChipRoom(room);
-    return result;
-  } finally {
-    await releaseLock(redis, roomId);
-  }
+  throw lastError ?? new Error("Table busy — try again");
 }

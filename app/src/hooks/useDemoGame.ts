@@ -242,10 +242,6 @@ export function useDemoGame() {
       const rid = roomIdRef.current;
       if (sid) {
         syncSocket(sid, rid);
-      } else {
-        socket.emit("demo-peek", (payload: { tables?: DemoTableInfo[] }) => {
-          if (payload?.tables) applyTables(payload.tables);
-        });
       }
     };
 
@@ -258,11 +254,13 @@ export function useDemoGame() {
     });
 
     socket.on("demo-lobby-tables", (payload: { tables?: DemoTableInfo[] }) => {
+      if (!sessionIdRef.current) return;
       if (payload?.tables) applyTables(payload.tables);
     });
 
     socket.on("demo-lobby-stats", (stats: DemoLobbyStats) => {
-      if (stats && roomIdRef.current) setLobbyStats(stats);
+      if (!sessionIdRef.current || !stats || !roomIdRef.current) return;
+      setLobbyStats(stats);
     });
 
     socket.on("demo-state", (state: DemoRoomView) => {
@@ -459,21 +457,52 @@ export function useDemoGame() {
       setJoining(true);
       setUsername(valid);
 
+      const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+      const retryable = (msg: string) =>
+        /busy|timed out|503|502|504/i.test(msg);
+
       try {
-        const data = await postDemoJson<JoinResult>(
-          "/api/demo/join",
-          {
-            username: valid,
-            preferPlayer,
-            sessionId: stored ?? undefined,
-            roomId: room,
-          },
-          15_000
-        );
-        applyJoinResult(data, valid);
-        if (!data.ok) {
-          setJoinError(data.error ?? "Could not join");
+        let lastErr: Error | null = null;
+        for (let attempt = 0; attempt < 4; attempt++) {
+          try {
+            const data = await postDemoJson<JoinResult>(
+              "/api/demo/join",
+              {
+                username: valid,
+                preferPlayer,
+                sessionId: stored ?? undefined,
+                roomId: room,
+              },
+              18_000
+            );
+            if (!data.ok) {
+              const errMsg = data.error ?? "Could not join";
+              if (attempt < 3 && retryable(errMsg)) {
+                await sleep(350 * (attempt + 1));
+                continue;
+              }
+              setJoinError(errMsg);
+              return;
+            }
+            applyJoinResult(data, valid);
+            return;
+          } catch (err) {
+            lastErr = err instanceof Error ? err : new Error("Join failed");
+            if (attempt < 3 && retryable(lastErr.message)) {
+              await sleep(350 * (attempt + 1));
+              continue;
+            }
+            break;
+          }
         }
+        const msg = lastErr?.message ?? "Join failed";
+        setJoinError(
+          msg === "Request timed out"
+            ? "Join timed out — try again in a few seconds"
+            : retryable(msg)
+              ? msg
+              : "Network error — check your connection and try again"
+        );
       } catch (err) {
         const msg =
           err instanceof Error && err.message === "Request timed out"
