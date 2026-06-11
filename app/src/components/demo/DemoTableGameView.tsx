@@ -120,12 +120,18 @@ export default function DemoTableGameView({
     phase: view?.phase,
   });
 
+  const isBettingPhase =
+    room?.phase === "preFlop" ||
+    room?.phase === "flop" ||
+    room?.phase === "turn" ||
+    room?.phase === "river";
+
   const isMyTurn =
-    myPlayer &&
+    !!myPlayer &&
     myDemoPlayer?.status === "active" &&
-    room &&
-    room.currentTurnSeat === myPlayer.seat &&
-    room.phase !== "waiting";
+    !!room &&
+    isBettingPhase &&
+    room.currentTurnSeat === myPlayer.seat;
 
   const turnTimerActive = !!(isMyTurn && myPlayer && view?.turnStartedAt);
   const { secondsLeft, progress, expired, urgent, phase: timerPhase } =
@@ -327,7 +333,7 @@ export default function DemoTableGameView({
       actionBar={
         <ActionPanel
           visible={!!(isMyTurn && myPlayer)}
-          showShell={!!inHand}
+          showShell={false}
           timerSecondsLeft={turnTimerActive ? secondsLeft : undefined}
           timerProgress={turnTimerActive ? progress : undefined}
           timerUrgent={urgent}

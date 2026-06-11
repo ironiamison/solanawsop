@@ -2478,8 +2478,8 @@ body {
 }
 
 .premium-pot-amount {
-  font-size: 1.85rem;
-  font-weight: 900;
+  font-size: 1.2rem;
+  font-weight: 800;
   line-height: 1;
   color: #fff;
   text-shadow: 0 2px 16px rgba(139, 92, 246, 0.45);
@@ -3367,6 +3367,13 @@ body {
 
 .premium-hero-hand {
   margin-bottom: 0.35rem;
+}
+
+.premium-villain-hand {
+  max-height: 2.5rem;
+  overflow: visible;
+  transform: scale(0.92);
+  transform-origin: top center;
 }
 
 .premium-hand-rank {

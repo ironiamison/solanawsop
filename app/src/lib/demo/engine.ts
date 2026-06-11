@@ -427,9 +427,24 @@ export class DemoRoomEngine {
     this.maybeScheduleAutoDeal();
   }
 
+  /** Keep seatToSession aligned with player.seat (safe during active hands). */
+  private syncSeatMap(): void {
+    const next: (string | null)[] = Array(DEMO_MAX_PLAYERS).fill(null);
+    for (const p of this.players.values()) {
+      const seat = p.seat;
+      if (seat >= 0 && seat < DEMO_MAX_PLAYERS && !next[seat]) {
+        next[seat] = p.sessionId;
+      }
+    }
+    this.seatToSession = next;
+  }
+
   /** Fix seat map drift from concurrent joins (Redis races) or bad snapshots. */
   reconcileSeats(): void {
-    if (this.phase !== "waiting") return;
+    if (this.phase !== "waiting") {
+      this.syncSeatMap();
+      return;
+    }
 
     this.seatToSession = Array(DEMO_MAX_PLAYERS).fill(null);
     const sorted = [...this.players.values()].sort((a, b) => a.seat - b.seat);

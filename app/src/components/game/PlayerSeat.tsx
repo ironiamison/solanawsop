@@ -25,9 +25,10 @@ function actionLabel(
   player: PlayerState,
   currentBet: number,
   inHand: boolean,
-  formatAmount: (n: number) => string
+  formatAmount: (n: number) => string,
+  isTurn: boolean
 ): string | null {
-  if (!inHand) return null;
+  if (!inHand || isTurn) return null;
   if (player.status === "folded") return "FOLD";
   if (player.status === "allIn") return "ALL IN";
   if (player.roundBet >= currentBet) return "CHECK";
@@ -118,7 +119,9 @@ export default function PlayerSeat({
     profile?.name ??
     (isMe ? "You" : `${w.slice(0, 6)}`);
   const level = pseudoLevel(w);
-  const action = player ? actionLabel(player, currentBet, !!inHand, formatAmount) : null;
+  const action = player
+    ? actionLabel(player, currentBet, !!inHand, formatAmount, isTurn)
+    : null;
   const resolvedAvatar =
     avatarUrl ?? profile?.image ?? playerAvatarUrl(displayName ?? name, 96);
 
@@ -128,7 +131,7 @@ export default function PlayerSeat({
 
   const holeCards = showCards ? (
     <div
-      className={`${isMe ? "mb-1" : "mt-2"} flex flex-col items-center ${isMe ? "premium-hero-hand" : ""}${isMucking ? " premium-hand-muck" : ""}`}
+      className={`${isMe ? "mb-1" : "mt-0.5"} flex flex-col items-center ${isMe ? "premium-hero-hand" : "premium-villain-hand"}${isMucking ? " premium-hand-muck" : ""}`}
     >
       <div className="flex gap-1">
         {isDealing && inHand && !isMucking ? (

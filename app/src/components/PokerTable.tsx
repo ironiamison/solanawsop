@@ -58,10 +58,18 @@ export default function PokerTable({
     .slice(0, room.communityCount)
     .filter((c) => c < 52);
 
-  const playerBySeat = new Map(players.map((p) => [p.seat, p]));
+  const playerByWallet = new Map(
+    players.map((p) => [p.wallet.toBase58(), p])
+  );
   const mySeat = myWallet
     ? (players.find((p) => p.wallet.equals(myWallet))?.seat ?? null)
     : null;
+
+  const playerAtSeat = (seatIndex: number): PlayerState | undefined => {
+    const seatPk = room.seats[seatIndex];
+    if (!seatPk || isEmptySeat(seatPk)) return undefined;
+    return playerByWallet.get(seatPk.toBase58());
+  };
 
   const [feltPulse, setFeltPulse] = useState(false);
   const [potPulse, setPotPulse] = useState(false);
@@ -203,7 +211,7 @@ export default function PokerTable({
             {room.seats.map((seatPk, seatIndex) => {
               const visual = visualSeat(seatIndex, mySeat);
               const coord = SEAT_COORDS[visual];
-              const player = playerBySeat.get(seatIndex);
+              const player = playerAtSeat(seatIndex);
               const seatOccupied =
                 !!player || (!isEmptySeat(seatPk) && seatPk !== undefined);
               const seatWallet = player?.wallet ?? seatPk;
@@ -213,10 +221,11 @@ export default function PokerTable({
                 !isEmptySeat(seatWallet) &&
                 seatWallet.equals(myWallet);
               const isTurn =
-                room.currentTurnSeat === seatIndex &&
+                !!player &&
+                room.currentTurnSeat === player.seat &&
                 room.phase !== "waiting" &&
                 room.phase !== "showdown" &&
-                player?.status === "active";
+                player.status === "active";
 
               if (!seatOccupied) {
                 return (
@@ -250,7 +259,7 @@ export default function PokerTable({
                   player={player}
                   isMe={!!isMe}
                   isTurn={isTurn}
-                  isDealer={room.dealerSeat === seatIndex}
+                  isDealer={!!player && room.dealerSeat === player.seat}
                   showHoleCards={showHoleCards}
                   inHand={room.phase !== "waiting"}
                   currentBet={room.currentBet}
