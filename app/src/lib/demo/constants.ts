@@ -7,6 +7,8 @@ export const DEMO_BIG_BLIND = 50_000_000;
 export const DEMO_BUY_IN = DEMO_START_STACK;
 /** Pause between hands before auto-dealing the next one */
 export const AUTO_DEAL_DELAY_MS = 4000;
+/** Reveal winner/cards before clearing — must be timestamp-driven (serverless-safe) */
+export const SHOWDOWN_DELAY_MS = 3500;
 export {
   ACTION_TIMER_SECONDS,
   ACTION_TIMER_MS,

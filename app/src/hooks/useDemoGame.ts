@@ -334,10 +334,10 @@ export function useDemoGame() {
   useEffect(() => {
     const sid = sessionId;
     if (!sid) return;
-    if (socketLive && !httpModeRef.current) return;
 
+    const ms = socketLive && !httpModeRef.current ? 1500 : 1000;
     void fetchState(sid, roomIdRef.current);
-    const poll = setInterval(() => void fetchState(sid, roomIdRef.current), 1200);
+    const poll = setInterval(() => void fetchState(sid, roomIdRef.current), ms);
     return () => clearInterval(poll);
   }, [sessionId, socketLive, fetchState, roomId]);
 

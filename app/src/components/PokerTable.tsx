@@ -215,6 +215,7 @@ export default function PokerTable({
               const isTurn =
                 room.currentTurnSeat === seatIndex &&
                 room.phase !== "waiting" &&
+                room.phase !== "showdown" &&
                 player?.status === "active";
 
               if (!seatOccupied) {

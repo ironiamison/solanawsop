@@ -4,6 +4,7 @@ import {
   consumeTimeBank,
   TIME_BANK_MS,
 } from "@/lib/game/turnTimer";
+import { formatTokens } from "@/lib/constants";
 import {
   AUTO_DEAL_DELAY_MS,
   DEMO_BIG_BLIND,
@@ -12,6 +13,7 @@ import {
   DEMO_ROOM_ID,
   DEMO_SMALL_BLIND,
   DEMO_START_STACK,
+  SHOWDOWN_DELAY_MS,
 } from "./constants";
 import { compareHands, evaluateHand } from "./handEval";
 import type {
@@ -64,6 +66,8 @@ export class DemoRoomEngine {
   statusMessage: string | null = null;
   lastHandWin: DemoHandWin | null = null;
   autoDealAt: number | null = null;
+  /** Wall-clock end of showdown reveal — persisted so serverless ticks can finish the hand */
+  showdownEndsAt: number | null = null;
 
   private showdownTimer: ReturnType<typeof setTimeout> | null = null;
   private stateListeners = new Set<() => void>();
@@ -99,10 +103,15 @@ export class DemoRoomEngine {
   }
 
   private clearShowdownTimer(): void {
+    this.showdownEndsAt = null;
     if (this.showdownTimer) {
       clearTimeout(this.showdownTimer);
       this.showdownTimer = null;
     }
+  }
+
+  private formatPot(pot: number): string {
+    return `${formatTokens(pot)} play chips`;
   }
 
   get playerCount(): number {
@@ -360,11 +369,25 @@ export class DemoRoomEngine {
     return result.ok;
   }
 
+  /** Finish showdown after the reveal delay (Redis/serverless-safe — no setTimeout required). */
+  processShowdown(): boolean {
+    if (this.phase !== "showdown") return false;
+    if (!this.showdownEndsAt) {
+      this.finishHand();
+      return true;
+    }
+    if (Date.now() < this.showdownEndsAt) return false;
+    this.showdownEndsAt = null;
+    this.finishHand();
+    return true;
+  }
+
   /** Run turn timeouts and scheduled auto-deals */
   tick(): boolean {
     let changed = this.ensureActiveTurn();
     if (this.checkTurnTimeout()) changed = true;
     if (this.tryRunOutBoard()) changed = true;
+    if (this.processShowdown()) changed = true;
     if (this.phase === "waiting") {
       const before = this.autoDealAt;
       this.maybeScheduleAutoDeal();
@@ -806,7 +829,7 @@ export class DemoRoomEngine {
       const pot = this.pot;
       winner.stack += pot;
       this.recordHandWin([winner.sessionId], pot);
-      this.statusMessage = `${winner.username} wins ${pot} play chips`;
+      this.statusMessage = `${winner.username} wins ${this.formatPot(pot)}`;
     }
     this.finishHand();
   }
@@ -826,7 +849,7 @@ export class DemoRoomEngine {
       const pot = this.pot;
       contenders[0].stack += pot;
       this.recordHandWin([contenders[0].sessionId], pot);
-      this.statusMessage = `${contenders[0].username} wins ${pot} play chips`;
+      this.statusMessage = `${contenders[0].username} wins ${this.formatPot(pot)}`;
       this.finishHand();
       return;
     }
@@ -857,7 +880,7 @@ export class DemoRoomEngine {
     );
     this.statusMessage =
       winners.length === 1
-        ? `${winners[0].username} wins ${pot} play chips`
+        ? `${winners[0].username} wins ${this.formatPot(pot)}`
         : `Split pot — ${winners.map((w) => w.username).join(", ")}`;
     this.beginShowdown();
   }
@@ -866,12 +889,13 @@ export class DemoRoomEngine {
   private beginShowdown(): void {
     this.clearShowdownTimer();
     this.phase = "showdown";
+    this.turnStartedAt = 0;
+    this.showdownEndsAt = Date.now() + SHOWDOWN_DELAY_MS;
     this.emitStateChange();
     this.showdownTimer = setTimeout(() => {
       this.showdownTimer = null;
-      this.finishHand();
-      this.emitStateChange();
-    }, 3500);
+      if (this.processShowdown()) this.emitStateChange();
+    }, SHOWDOWN_DELAY_MS);
   }
 
   private finishHand(): void {
@@ -972,6 +996,7 @@ export class DemoRoomEngine {
       statusMessage: this.statusMessage,
       lastHandWin: this.lastHandWin,
       autoDealAt: this.autoDealAt,
+      showdownEndsAt: this.showdownEndsAt,
       roomId: this.roomId,
       startStack: this.startStack,
       players: [...this.players.values()],
@@ -999,6 +1024,10 @@ export class DemoRoomEngine {
     this.statusMessage = s.statusMessage;
     this.lastHandWin = s.lastHandWin ?? null;
     this.autoDealAt = s.autoDealAt ?? null;
+    this.showdownEndsAt = s.showdownEndsAt ?? null;
+    if (this.phase === "showdown" && !this.showdownEndsAt) {
+      this.showdownEndsAt = Date.now();
+    }
     this.players = new Map(
       s.players.map((p) => [
         p.sessionId,
@@ -1043,6 +1072,7 @@ export interface DemoRoomSnapshot {
   statusMessage: string | null;
   lastHandWin: DemoHandWin | null;
   autoDealAt: number | null;
+  showdownEndsAt?: number | null;
   roomId: string;
   startStack: number;
   players: DemoPlayer[];
