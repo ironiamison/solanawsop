@@ -5,8 +5,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useRouter, useSearchParams } from "next/navigation";
 import DashboardShell from "@/components/layout/DashboardShell";
-import LoginButton from "@/components/LoginButton";
-import BrandChipMark from "@/components/brand/BrandChipMark";
+import { GuestGatedContent } from "@/components/profile/GuestGatedPage";
 import { BtnSecondary } from "@/components/home/lobby";
 import FriendsPanel from "@/components/social/FriendsPanel";
 import MessagesPanel from "@/components/social/MessagesPanel";
@@ -97,24 +96,8 @@ function ProfileContent() {
     return <div className="profile-loading">Loading profile…</div>;
   }
 
-  if (!authenticated) {
-    return (
-      <div className="profile-guest">
-        <div className="profile-guest-card">
-          <div className="profile-guest-brand">
-            <BrandChipMark variant="lockup" size="md" />
-          </div>
-          <p className="profile-guest-title">Your player profile</p>
-          <p className="profile-guest-copy">
-            Connect to manage rewards, friends, messages, and table invites — all synced globally.
-          </p>
-          <LoginButton variant="dashboard" />
-        </div>
-      </div>
-    );
-  }
-
   return (
+    <GuestGatedContent tab={tab}>
     <div className="profile-page">
       <ProfileHero profile={heroProfile} onLinkTwitter={linkTwitter} />
 
@@ -231,6 +214,7 @@ function ProfileContent() {
         </ProfileSection>
       )}
     </div>
+    </GuestGatedContent>
   );
 }
 

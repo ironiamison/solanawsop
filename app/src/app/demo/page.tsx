@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMinLoadingDuration } from "@/hooks/useMinLoadingDuration";
 import DemoJoinScreen from "@/components/demo/DemoJoinScreen";
 import DemoTableGameView from "@/components/demo/DemoTableGameView";
@@ -12,6 +12,15 @@ export default function DemoPage() {
   const { join, joinError, sessionId, joining, connected, lobbyStats } = game;
   const [name, setName] = useState("");
   const minLoadingDone = useMinLoadingDuration(undefined, sessionId);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    try {
+      localStorage.setItem("solanawsop_demo_visited", "1");
+    } catch {
+      // ignore
+    }
+  }, [sessionId]);
 
   if (!sessionId) {
     return (

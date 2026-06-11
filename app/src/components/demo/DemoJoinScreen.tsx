@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useMemo } from "react";
-import BrandChipMark from "@/components/brand/BrandChipMark";
+import BrandWordLockup from "@/components/brand/BrandWordLockup";
 import LobbyAssetImage from "@/components/home/LobbyAssetImage";
 import { validateUsername, normalizeUsername } from "@/lib/demo/ids";
 import { DEMO_MAX_PLAYERS } from "@/lib/demo/constants";
@@ -69,7 +69,7 @@ export default function DemoJoinScreen({
       <div className="relative z-10 flex min-h-screen items-center justify-center p-4 sm:p-8">
         <div className="demo-join-shell w-full max-w-[440px]">
           <header className="demo-join-brand">
-            <BrandChipMark variant="lockup" size="lg" priority showTagline />
+            <BrandWordLockup size="lg" priority showTagline />
           </header>
 
           <article className="demo-join-card">

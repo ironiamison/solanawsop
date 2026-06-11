@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { io, Socket } from "socket.io-client";
+import type { Socket } from "socket.io-client";
+import { createAppSocket } from "@/lib/socket-client";
 
 export interface ChatMessage {
   roomId: string;
@@ -20,10 +21,7 @@ export function useSocket(roomId: string | null) {
   useEffect(() => {
     if (!roomId) return;
 
-    const socket = io({
-      path: "/api/socket",
-      transports: ["websocket", "polling"],
-    });
+    const socket = createAppSocket();
     socketRef.current = socket;
 
     socket.on("connect", () => {

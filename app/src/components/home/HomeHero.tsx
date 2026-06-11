@@ -2,7 +2,7 @@
 
 import { PublicKey } from "@solana/web3.js";
 import { TOKEN_SYMBOL } from "@/lib/constants";
-import BrandChipMark from "@/components/brand/BrandChipMark";
+import BrandWordLockup from "@/components/brand/BrandWordLockup";
 import { BtnGhost, BtnPrimary } from "./lobby";
 import HeroAssets from "./HeroAssets";
 
@@ -13,12 +13,7 @@ export default function HomeHero({ playTarget }: { playTarget?: PublicKey }) {
     <section className="lobby-hero premium-hero relative overflow-hidden rounded-2xl border border-white/[0.08]">
       <div className="relative z-10 grid lg:grid-cols-[1fr_300px]">
         <div className="p-6 sm:p-8 lg:py-9">
-          <BrandChipMark
-            variant="lockup"
-            size="md"
-            showTagline
-            className="mb-4"
-          />
+          <BrandWordLockup size="md" showTagline className="mb-4" />
           <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-violet-400/90">
             Solana · 6-max NL Hold&apos;em
           </p>

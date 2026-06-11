@@ -17,6 +17,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/messages": "Messages",
   "/profile": "Profile",
   "/leaderboard": "Leaderboard",
+  "/tournaments": "Tournaments",
   "/terms": "Terms",
   "/privacy": "Privacy",
 };
@@ -36,7 +37,7 @@ export default function DashboardTopBar() {
   return (
     <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-white/[0.06] bg-[#070709]/90 px-4 backdrop-blur-md lg:px-5">
       <div className="flex min-w-0 items-center gap-2.5">
-        <BrandHeaderLogo className="lg:hidden" priority />
+        <BrandHeaderLogo className="topbar-brand-lockup lg:hidden" priority />
         <div className="flex items-center gap-2 rounded-lg border border-white/[0.08] bg-[#0c0c10] px-3 py-1.5">
           <LiveDot />
           <span className="text-xs font-medium capitalize text-zinc-300">{SOLANA_NETWORK}</span>

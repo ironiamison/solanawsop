@@ -1,14 +1,14 @@
 "use client";
 
 import { Suspense } from "react";
-import DashboardShell from "@/components/layout/DashboardShell";
+import GuestGatedPage from "@/components/profile/GuestGatedPage";
 import ProfilePageHeader from "@/components/profile/ProfilePageHeader";
 import ProfileSection from "@/components/profile/ProfileSection";
 import MessagesPanel from "@/components/social/MessagesPanel";
 
 export default function MessagesPage() {
   return (
-    <DashboardShell>
+    <GuestGatedPage tab="messages">
       <ProfilePageHeader
         title="Messages"
         subtitle="DM friends to coordinate invites, buy-ins, and table talk."
@@ -18,6 +18,6 @@ export default function MessagesPage() {
           <MessagesPanel />
         </Suspense>
       </ProfileSection>
-    </DashboardShell>
+    </GuestGatedPage>
   );
 }

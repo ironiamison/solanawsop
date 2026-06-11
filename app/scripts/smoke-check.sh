@@ -2,7 +2,7 @@
 # Quick smoke check — run with dev server on PORT (default 3001)
 set -euo pipefail
 BASE="${1:-http://localhost:3001}"
-ROUTES="/ /demo /profile /leaderboard /terms /privacy /loading /api/flywheel/stats /api/rewards/redeem"
+ROUTES="/ /demo /profile /leaderboard /tournaments /terms /privacy /loading /api/flywheel/stats /api/rewards/redeem"
 
 echo "Smoke check → $BASE"
 for path in $ROUTES; do

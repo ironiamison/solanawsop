@@ -11,6 +11,12 @@ export const APP_URL =
     ? "https://solanawsop.com"
     : "http://localhost:3001");
 
+/**
+ * Socket.io server origin. Unset = same host as the page (works on `npm run dev` + VPS).
+ * On Vercel, point this at a Node host running `server.ts` (Railway, Render, VPS).
+ */
+export const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || undefined;
+
 /** Product brand */
 export const BRAND_NAME =
   process.env.NEXT_PUBLIC_BRAND_NAME ?? "SolanaWSOP";

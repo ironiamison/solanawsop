@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { io, Socket } from "socket.io-client";
+import type { Socket } from "socket.io-client";
+import { createAppSocket } from "@/lib/socket-client";
 import { DEMO_ROOM_ID } from "@/lib/demo/constants";
 import { DEMO_SESSION_STORAGE_KEY, validateUsername } from "@/lib/demo/ids";
 import type { DemoAction, DemoRole, DemoRoomView } from "@/lib/demo/types";
@@ -65,11 +66,7 @@ export function useDemoGame() {
         .catch(() => {});
     }, 5000);
 
-    const socket = io({
-      path: "/api/socket",
-      transports: ["websocket", "polling"],
-      reconnectionAttempts: 12,
-    });
+    const socket = createAppSocket({ reconnectionAttempts: 12 });
     socketRef.current = socket;
 
     const onConnect = () => {

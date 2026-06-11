@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import BrandChipMark from "@/components/brand/BrandChipMark";
+import BrandWordLockup from "@/components/brand/BrandWordLockup";
 import { formatTokens, TOKEN_SYMBOL } from "@/lib/constants";
 
 type NavItem = {
@@ -23,7 +23,7 @@ const NAV: NavItem[] = [
     icon: "play",
     match: (p) => p.startsWith("/demo") || p.startsWith("/table"),
   },
-  { href: "/", label: "Tournaments", icon: "trophy", hash: "#tournaments" },
+  { href: "/tournaments", label: "Tournaments", icon: "trophy" },
   { href: "/friends", label: "Friends", icon: "users" },
   { href: "/messages", label: "Messages", icon: "chat" },
   { href: "/leaderboard", label: "Leaderboard", icon: "chart" },
@@ -98,14 +98,7 @@ export default function GameSidebarNav({
   return (
     <aside className="opoker-sidebar flex min-h-0 flex-col">
       <div className="sidebar-brand-header border-b border-white/[0.06]">
-        <BrandChipMark
-          variant="lockup"
-          size="sm"
-          href="/"
-          priority
-          showTagline={false}
-          className="sidebar-brand-chip"
-        />
+        <BrandWordLockup size="md" href="/" priority className="sidebar-brand-lockup" />
       </div>
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">

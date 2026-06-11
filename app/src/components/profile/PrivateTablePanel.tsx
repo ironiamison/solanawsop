@@ -15,7 +15,7 @@ import { tableInviteUrl } from "@/lib/table-invites";
 import { createPrivateTable, invitePlayer } from "@/lib/program";
 import { privateRoomPda } from "@/lib/pdas";
 import { usePokerProgram } from "@/hooks/usePokerProgram";
-import BrandChipMark from "@/components/brand/BrandChipMark";
+import BrandWordLockup from "@/components/brand/BrandWordLockup";
 
 type TableRow = {
   id: string;
@@ -36,7 +36,7 @@ function PrivateTablesComingSoon() {
     <div className="private-tables-panel">
       <div className="private-tables-soon-hero">
         <div className="private-tables-soon-chip" aria-hidden>
-          <BrandChipMark variant="lockup" size="lg" showTagline />
+          <BrandWordLockup size="lg" showTagline />
         </div>
         <div className="private-tables-soon-head">
           <span className="premium-coming-soon-badge">Coming soon</span>

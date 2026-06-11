@@ -3,15 +3,10 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import LobbyAssetImage from "./LobbyAssetImage";
-import { BUY_IN_TIERS, TOKEN_SYMBOL, WEEKLY_TOURNAMENT } from "@/lib/constants";
-import { roomPda } from "@/lib/pdas";
+import { getFeaturedTournament, UPCOMING_TOURNAMENTS } from "@/lib/tournaments";
 import { formatCountdown, nextWeeklyTournamentStart } from "@/lib/tournament";
+import { roomPda } from "@/lib/pdas";
 import { BtnBlockLabel, LobbyCard, SectionTitle, TextLink } from "./lobby";
-
-const UPCOMING = [
-  { title: "Deep Stack #87", meta: "250K buy-in · 5K pool", starts: "2h 14m" },
-  { title: "Bounty Hunter #56", meta: "100K buy-in · 2.5K pool", starts: "5h 30m" },
-];
 
 function FeaturedTrophy() {
   return (
@@ -33,8 +28,8 @@ function FeaturedTrophy() {
 
 export default function TournamentsPanel() {
   const [countdown, setCountdown] = useState("");
-  const tier = BUY_IN_TIERS[WEEKLY_TOURNAMENT.tierIndex];
-  const [room] = roomPda(WEEKLY_TOURNAMENT.tierIndex);
+  const featured = getFeaturedTournament();
+  const [room] = roomPda(featured.tierIndex ?? 1);
   const href = `/table/${room.toBase58()}`;
 
   useEffect(() => {
@@ -47,7 +42,7 @@ export default function TournamentsPanel() {
 
   return (
     <LobbyCard id="tournaments" className="p-5" hover={false}>
-      <SectionTitle action={<TextLink href={href}>View all</TextLink>}>
+      <SectionTitle action={<TextLink href="/tournaments">View all</TextLink>}>
         Tournaments
       </SectionTitle>
 
@@ -62,13 +57,13 @@ export default function TournamentsPanel() {
               Featured
             </p>
             <p className="mt-0.5 text-[15px] font-bold leading-tight text-white">
-              {TOKEN_SYMBOL} Championship
+              {featured.title}
             </p>
             <p className="mt-1.5 text-xs text-zinc-500">
-              Prize pool · <span className="font-semibold text-zinc-400">25K {TOKEN_SYMBOL}</span>
+              Prize pool · <span className="font-semibold text-zinc-400">{featured.prizePool}</span>
             </p>
             <p className="mt-0.5 text-[11px] text-zinc-600">
-              {tier.label} buy-in · starts {countdown || "—"}
+              {featured.buyInLabel} buy-in · starts {countdown || featured.startsIn || "—"}
             </p>
           </div>
         </div>
@@ -76,18 +71,22 @@ export default function TournamentsPanel() {
       </Link>
 
       <ul className="space-y-2">
-        {UPCOMING.map((t) => (
-          <li
-            key={t.title}
-            className="flex items-center justify-between rounded-xl border border-white/[0.05] bg-[#08080c] px-3 py-3 transition hover:border-white/[0.08]"
-          >
-            <div className="min-w-0">
-              <p className="truncate text-xs font-semibold text-zinc-300">{t.title}</p>
-              <p className="text-[10px] text-zinc-600">{t.meta}</p>
-            </div>
-            <span className="shrink-0 text-[10px] font-medium tabular-nums text-violet-400">
-              {t.starts}
-            </span>
+        {UPCOMING_TOURNAMENTS.slice(0, 2).map((t) => (
+          <li key={t.id}>
+            <Link
+              href="/tournaments"
+              className="flex items-center justify-between rounded-xl border border-white/[0.05] bg-[#08080c] px-3 py-3 transition hover:border-white/[0.08]"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-xs font-semibold text-zinc-300">{t.title}</p>
+                <p className="text-[10px] text-zinc-600">
+                  {t.buyInLabel} · {t.prizePool}
+                </p>
+              </div>
+              <span className="shrink-0 text-[10px] font-medium tabular-nums text-violet-400">
+                {t.startsIn}
+              </span>
+            </Link>
           </li>
         ))}
       </ul>

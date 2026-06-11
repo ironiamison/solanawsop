@@ -6,7 +6,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { formatTokens, TOKEN_SYMBOL } from "@/lib/constants";
-import BrandChipMark from "@/components/brand/BrandChipMark";
+import BrandWordLockup from "@/components/brand/BrandWordLockup";
 import { useSocialCounts } from "@/hooks/useSocialCounts";
 
 type NavItem = {
@@ -20,7 +20,7 @@ type NavItem = {
 const NAV: NavItem[] = [
   { href: "/", label: "Home", icon: "home" },
   { href: "/", label: "Play", icon: "play", hash: "#cash-games" },
-  { href: "/", label: "Tournaments", icon: "trophy", hash: "#tournaments" },
+  { href: "/tournaments", label: "Tournaments", icon: "trophy" },
   { href: "/friends", label: "Friends", icon: "users", badgeKey: "friends" },
   { href: "/messages", label: "Messages", icon: "chat", badgeKey: "messages" },
   { href: "/leaderboard", label: "Leaderboard", icon: "chart" },
@@ -103,14 +103,7 @@ export default function DashboardSidebar({ balanceRaw = 0 }: { balanceRaw?: numb
   return (
     <aside className="hidden w-[228px] shrink-0 flex-col border-r border-white/[0.06] bg-[#070709] lg:flex">
       <div className="sidebar-brand-header border-b border-white/[0.06]">
-        <BrandChipMark
-          variant="lockup"
-          size="sm"
-          href="/"
-          priority
-          showTagline={false}
-          className="sidebar-brand-chip"
-        />
+        <BrandWordLockup size="md" href="/" priority className="sidebar-brand-lockup" />
       </div>
 
       <nav className="flex-1 space-y-0.5 px-3 py-4">

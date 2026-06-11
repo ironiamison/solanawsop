@@ -3,12 +3,15 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import BrandChipMark from "@/components/brand/BrandChipMark";
+import BrandWordLockup from "@/components/brand/BrandWordLockup";
 import ReferralInviteCard from "@/components/rewards/ReferralInviteCard";
-import { BRAND_NAME, TOKEN_SYMBOL } from "@/lib/constants";
+import { BRAND_NAME } from "@/lib/constants";
 import { playerAvatarUrl } from "@/lib/avatars";
 import LoadingPageShell from "@/components/loading/LoadingPageShell";
 import { LoadingLobbyIcon } from "@/components/loading/LoadingLobbyIcons";
 import { MIN_LOADING_SCREEN_MS } from "@/hooks/useMinLoadingDuration";
+import { useLoadingLobbyData } from "@/hooks/useLoadingLobbyData";
+import { usePokerProgram } from "@/hooks/usePokerProgram";
 
 type StepState = "done" | "active" | "waiting";
 
@@ -20,16 +23,6 @@ interface LoadingLobbyProps {
   tablesActive?: number;
   assetProgress?: number;
 }
-
-const LIVE_FEED = [
-  { user: "@ChainLord", action: "Won a bounty", amount: "+2,450", secondsAgo: 2 },
-  { user: "@PokerKing", action: "Completed a bounty", amount: "+1,820", secondsAgo: 5 },
-  { user: "@BluffMaster", action: "Won a bounty", amount: "+3,200", secondsAgo: 8 },
-  { user: "@SharkLegend", action: "Completed a bounty", amount: "+1,150", secondsAgo: 12 },
-  { user: "@DegenHero", action: "Won a bounty", amount: "+2,780", secondsAgo: 18 },
-]
-  .map((item) => ({ ...item, avatar: playerAvatarUrl(item.user, 64) }))
-  .sort((a, b) => a.secondsAgo - b.secondsAgo);
 
 const TIP_SLIDES = [
   "High stakes tables give higher bounties. Play smart.",
@@ -69,13 +62,30 @@ function DonutChart() {
   );
 }
 
+function formatStat(value: number | undefined, ready: boolean): string {
+  if (!ready || value === undefined) return "—";
+  return value.toLocaleString();
+}
+
 export default function LoadingLobby({
   progress: externalProgress,
   subtitle = "Fetching tables, players, and game data…",
-  playersOnline = 1247,
-  tablesActive = 156,
+  playersOnline: playersOnlineProp,
+  tablesActive: tablesActiveProp,
   assetProgress: externalAssetProgress,
 }: LoadingLobbyProps) {
+  const { authenticated } = usePokerProgram();
+  const {
+    playersOnline,
+    tablesActive,
+    statsReady,
+    activity,
+    activityLoading,
+  } = useLoadingLobbyData({
+    playersOnline: playersOnlineProp,
+    tablesActive: tablesActiveProp,
+  });
+
   const [autoProgress, setAutoProgress] = useState(0);
   const [assetAuto, setAssetAuto] = useState(0);
   const [tipIndex, setTipIndex] = useState(0);
@@ -114,12 +124,26 @@ export default function LoadingLobby({
     return () => clearInterval(id);
   }, []);
 
-  const steps = useMemo(
-    () => [
-      { label: "Wallet Connected", detail: "Completed", state: stepState(progress, 0, 12) },
+  const steps = useMemo(() => {
+    const walletState: StepState = authenticated
+      ? "done"
+      : progress >= 8
+        ? "active"
+        : "waiting";
+
+    return [
+      {
+        label: "Wallet",
+        detail: authenticated ? "Connected" : "Optional",
+        state: walletState,
+      },
       { label: "Game Servers", detail: "Connected", state: stepState(progress, 12, 28) },
       { label: "On-Chain Verification", detail: "Verified", state: stepState(progress, 28, 45) },
-      { label: "Player Data", detail: progress >= 65 ? "Synced" : "Loading…", state: stepState(progress, 45, 65) },
+      {
+        label: "Player Data",
+        detail: progress >= 65 ? "Synced" : "Loading…",
+        state: stepState(progress, 45, 65),
+      },
       {
         label: "Table Initialization",
         detail: progress >= 88 ? "Ready" : `${Math.min(99, Math.round(progress))}%`,
@@ -130,11 +154,10 @@ export default function LoadingLobby({
         detail: progress >= 96 ? "Ready" : "Waiting",
         state: stepState(progress, 88, 96),
       },
-    ],
-    [progress]
-  );
+    ];
+  }, [progress, authenticated]);
 
-  const eta = progress >= 90 ? "< 1s" : progress >= 60 ? "2–4s" : "4–8s";
+  const eta = progress >= 90 ? "< 1s" : progress >= 60 ? "1–2s" : "3–5s";
 
   return (
     <LoadingPageShell>
@@ -167,13 +190,11 @@ export default function LoadingLobby({
             <div className="loading-glass-card loading-tips-card">
               <p className="loading-card-label">
                 <span className="loading-tips-bulb" aria-hidden>
-                  <LoadingLobbyIcon name="bulb" tone="amber" className="!h-7 !w-7" />
+                  <LoadingLobbyIcon name="bulb" tone="amber" className="loading-tips-icon" />
                 </span>{" "}
                 Tips
               </p>
-              <p className="loading-tips-text">
-                Sit at tables with higher average stack to play bigger pots and earn more.
-              </p>
+              <p className="loading-tips-text">{TIP_SLIDES[tipIndex]}</p>
             </div>
 
             <ReferralInviteCard variant="loading" />
@@ -181,42 +202,35 @@ export default function LoadingLobby({
 
           <main className="loading-lobby-center">
             <div className="loading-hero-brand">
-              <BrandChipMark
-                variant="lockup"
-                size="xl"
-                priority
-                showTagline
-                className="loading-hero-chip"
-              />
+              <BrandWordLockup size="md" priority showTagline className="loading-hero-lockup" />
             </div>
 
             <p className="loading-welcome">Welcome to {BRAND_NAME}</p>
             <h1 className="loading-title">Loading lobby</h1>
             <p className="loading-subtitle">{subtitle}</p>
 
-            {/* Penthouse table shows through this transparent stage */}
-            <div className="loading-table-stage" aria-hidden />
-
-            <div className="loading-stats-bar">
-              <div className="loading-stat">
-                <LoadingLobbyIcon name="clock" tone="green" />
-                <div>
-                  <p className="loading-stat-label">Estimated time</p>
-                  <p className="loading-stat-value">{eta}</p>
+            <div className="loading-table-stage" aria-hidden>
+              <div className="loading-stats-bar">
+                <div className="loading-stat">
+                  <LoadingLobbyIcon name="clock" tone="green" />
+                  <div>
+                    <p className="loading-stat-label">Estimated time</p>
+                    <p className="loading-stat-value">{eta}</p>
+                  </div>
                 </div>
-              </div>
-              <div className="loading-stat">
-                <LoadingLobbyIcon name="users" tone="green" />
-                <div>
-                  <p className="loading-stat-label">Players online</p>
-                  <p className="loading-stat-value">{playersOnline.toLocaleString()}</p>
+                <div className="loading-stat">
+                  <LoadingLobbyIcon name="users" tone="green" />
+                  <div>
+                    <p className="loading-stat-label">Players online</p>
+                    <p className="loading-stat-value">{formatStat(playersOnline, statsReady)}</p>
+                  </div>
                 </div>
-              </div>
-              <div className="loading-stat">
-                <LoadingLobbyIcon name="table" tone="purple" />
-                <div>
-                  <p className="loading-stat-label">Tables active</p>
-                  <p className="loading-stat-value">{tablesActive}</p>
+                <div className="loading-stat">
+                  <LoadingLobbyIcon name="table" tone="purple" />
+                  <div>
+                    <p className="loading-stat-label">Tables active</p>
+                    <p className="loading-stat-value">{formatStat(tablesActive, statsReady)}</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -240,30 +254,40 @@ export default function LoadingLobby({
                 <p className="loading-card-label">Live activity</p>
                 <span className="loading-live-badge">Live</span>
               </div>
-              <ul className="loading-activity-list">
-                {LIVE_FEED.map((item) => (
-                  <li key={`${item.user}-${item.secondsAgo}`} className="loading-activity-item">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={item.avatar} alt="" className="loading-activity-avatar" />
-                    <div className="min-w-0 flex-1">
-                      <p className="loading-activity-user">{item.user}</p>
-                      <p className="loading-activity-action">{item.action}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="loading-activity-amount">
-                        {item.amount} {TOKEN_SYMBOL}
-                      </p>
-                      <p className="loading-activity-ago">{item.secondsAgo}s ago</p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              {activityLoading ? (
+                <p className="loading-activity-empty">Loading activity…</p>
+              ) : activity.length === 0 ? (
+                <p className="loading-activity-empty">
+                  No recent activity yet — play a hand to show up here.
+                </p>
+              ) : (
+                <ul className="loading-activity-list">
+                  {activity.map((item) => (
+                    <li key={item.id} className="loading-activity-item">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={item.image ?? playerAvatarUrl(item.user, 64)}
+                        alt=""
+                        className="loading-activity-avatar"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="loading-activity-user">{item.user}</p>
+                        <p className="loading-activity-action">{item.action}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="loading-activity-amount">{item.amountLabel}</p>
+                        <p className="loading-activity-ago">{item.ago}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
 
             <div className="loading-glass-card loading-fee-card">
               <div className="flex items-center justify-between">
                 <p className="loading-card-label">Fee routing</p>
-                <LoadingLobbyIcon name="solana" tone="purple" className="!h-7 !w-7" />
+                <LoadingLobbyIcon name="solana" tone="purple" className="loading-fee-icon" />
               </div>
               <p className="loading-fee-big">
                 20% <span>to winner</span>
@@ -304,7 +328,7 @@ export default function LoadingLobby({
             ))}
           </div>
 
-          <BrandChipMark variant="icon" size="md" className="loading-footer-mark opacity-50" />
+          <BrandChipMark variant="icon" size="sm" className="loading-footer-mark opacity-50" />
           <div className="loading-footer-links">
             <Link href="/terms">Terms</Link>
             <Link href="/privacy">Privacy</Link>

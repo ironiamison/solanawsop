@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 /** Minimum time the loading lobby stays visible (ms) */
-export const MIN_LOADING_SCREEN_MS = 8000;
+export const MIN_LOADING_SCREEN_MS = 5500;
 
 /**
  * Returns false until `ms` has elapsed. Pass `resetKey` to restart the timer
