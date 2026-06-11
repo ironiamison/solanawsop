@@ -334,8 +334,7 @@ export default function LoadingLobby({
 
           <BrandChipMark variant="icon" size="sm" className="loading-footer-mark opacity-50" />
           <div className="loading-footer-links">
-            <Link href="/terms">Terms</Link>
-            <Link href="/privacy">Privacy</Link>
+            <Link href="/docs">Docs</Link>
           </div>
         </footer>
       </div>

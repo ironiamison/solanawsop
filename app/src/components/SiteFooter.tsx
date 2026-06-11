@@ -11,11 +11,8 @@ export default function SiteFooter() {
         </p>
         <TokenContractAddress variant="footer" />
         <p className="mt-3 flex flex-wrap items-center justify-center gap-4 text-[11px] text-zinc-600">
-          <Link href="/terms" className="transition hover:text-zinc-400">
-            Terms
-          </Link>
-          <Link href="/privacy" className="transition hover:text-zinc-400">
-            Privacy
+          <Link href="/docs" className="transition hover:text-zinc-400">
+            Docs
           </Link>
           <Link href="/leaderboard" className="transition hover:text-zinc-400">
             Leaderboard
