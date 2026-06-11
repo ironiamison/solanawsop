@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: solanawsop-socket
+    runtime: docker
+    dockerfilePath: ./Dockerfile.socket
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: ALLOWED_ORIGINS
+        value: https://solanawsop.com,https://www.solanawsop.com

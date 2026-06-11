@@ -78,9 +78,44 @@ curl -I https://solanawsop.com
 cd app && npm run smoke https://solanawsop.com
 ```
 
+## Vercel frontend + socket server (current production)
+
+The site UI can stay on **Vercel**. Real-time poker needs a small Node service running `socket-server.ts`.
+
+### 1. Deploy the socket service (Railway — easiest)
+
+1. [railway.app](https://railway.app) → New Project → Deploy from GitHub → repo `ironiamison/solanawsop`
+2. Set **Root directory** to `solana_poker/app` (or `app` if monorepo root is `solana_poker`)
+3. Railway picks up `railway.toml` + `Dockerfile.socket` automatically
+4. Add env var: `ALLOWED_ORIGINS=https://solanawsop.com,https://www.solanawsop.com`
+5. Copy the public URL (e.g. `https://solanawsop-socket-production.up.railway.app`)
+
+**Render:** use `app/render.yaml` instead (same env vars).
+
+**Local test:** `cd app && npm run socket` → health at http://localhost:3000/health
+
+### 2. Point Vercel at the socket server
+
+In Vercel → Project → Settings → Environment Variables:
+
+| Variable | Value |
+|----------|-------|
+| `NEXT_PUBLIC_SOCKET_URL` | Your Railway/Render URL (no trailing slash) |
+
+Redeploy Vercel after saving. The demo table, chat, and voice all use this host.
+
+### 3. Verify
+
+```bash
+curl https://YOUR-SOCKET-URL/health
+curl https://YOUR-SOCKET-URL/api/demo/lobby
+```
+
+Open https://solanawsop.com/demo — badge should show **Live** and sockets connect.
+
 ## Not supported without changes
 
-- **Vercel / Netlify static** — custom `server.ts` + Socket.io need a long-running Node process
+- **Vercel alone** — no long-running Socket.io on serverless
 - **Namecheap shared PHP hosting** — no Node runtime
 
 ## Optional: Postgres

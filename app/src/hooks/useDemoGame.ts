@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Socket } from "socket.io-client";
 import { createAppSocket } from "@/lib/socket-client";
+import { demoApiUrl } from "@/lib/demo-api";
+import { SOCKET_URL } from "@/lib/constants";
 import { DEMO_ROOM_ID } from "@/lib/demo/constants";
 import { DEMO_SESSION_STORAGE_KEY, validateUsername } from "@/lib/demo/ids";
 import type { DemoAction, DemoRole, DemoRoomView } from "@/lib/demo/types";
@@ -25,10 +27,30 @@ const DEFAULT_LOBBY: DemoLobbyStats = {
   maxPlayers: 6,
 };
 
+function applyViewRole(
+  state: DemoRoomView,
+  sid: string,
+  setView: (v: DemoRoomView) => void,
+  setRole: (r: DemoRole) => void,
+  setLobbyStats: (s: DemoLobbyStats) => void
+) {
+  setView(state);
+  setLobbyStats({
+    playerCount: state.playerCount,
+    spectators: state.spectators.length,
+    isFull: state.playerCount >= 6,
+    maxPlayers: 6,
+  });
+  if (state.players.some((p) => p.sessionId === sid)) setRole("player");
+  else if (state.spectators.some((s) => s.sessionId === sid)) setRole("spectator");
+}
+
 export function useDemoGame() {
   const socketRef = useRef<Socket | null>(null);
   const sessionIdRef = useRef<string | null>(null);
-  const [connected, setConnected] = useState(false);
+  const httpModeRef = useRef(!SOCKET_URL);
+  const [socketLive, setSocketLive] = useState(false);
+  const [serverReady, setServerReady] = useState(false);
   const [view, setView] = useState<DemoRoomView | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [role, setRole] = useState<DemoRole | null>(null);
@@ -39,6 +61,58 @@ export function useDemoGame() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [actionPending, setActionPending] = useState(false);
   const [lobbyStats, setLobbyStats] = useState<DemoLobbyStats>(DEFAULT_LOBBY);
+
+  const fetchLobby = useCallback(async () => {
+    try {
+      const res = await fetch(demoApiUrl("/api/demo/lobby"));
+      if (!res.ok) return null;
+      const stats = (await res.json()) as DemoLobbyStats;
+      if (stats) {
+        setLobbyStats(stats);
+        setServerReady(true);
+      }
+      return stats;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const fetchState = useCallback(async (sid: string) => {
+    try {
+      const res = await fetch(
+        demoApiUrl(`/api/demo/state?sessionId=${encodeURIComponent(sid)}`)
+      );
+      if (res.status === 404) return null;
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (data.state) {
+        applyViewRole(data.state, sid, setView, setRole, setLobbyStats);
+      }
+      if (data.lobby) setLobbyStats(data.lobby);
+      return data;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const demoHttpPost = useCallback(
+    async (path: string, body: Record<string, unknown> = {}) => {
+      const sid = sessionIdRef.current;
+      if (!sid) return { ok: false, error: "Not in demo" };
+      const res = await fetch(demoApiUrl(path), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: sid, ...body }),
+      });
+      const data = await res.json();
+      if (data.state) {
+        applyViewRole(data.state, sid, setView, setRole, setLobbyStats);
+      }
+      if (data.lobby) setLobbyStats(data.lobby);
+      return data;
+    },
+    []
+  );
 
   const syncSocket = useCallback((sid: string) => {
     const socket = socketRef.current;
@@ -54,23 +128,16 @@ export function useDemoGame() {
   }, [sessionId]);
 
   useEffect(() => {
-    fetch("/api/demo/lobby")
-      .then((r) => r.json())
-      .then((stats) => stats && setLobbyStats(stats))
-      .catch(() => {});
+    void fetchLobby();
+    const lobbyPoll = setInterval(() => void fetchLobby(), 5000);
 
-    const lobbyPoll = setInterval(() => {
-      fetch("/api/demo/lobby")
-        .then((r) => r.json())
-        .then((stats) => stats && setLobbyStats(stats))
-        .catch(() => {});
-    }, 5000);
-
-    const socket = createAppSocket({ reconnectionAttempts: 12 });
+    const socket = createAppSocket({ reconnectionAttempts: SOCKET_URL ? 12 : 3 });
     socketRef.current = socket;
 
     const onConnect = () => {
-      setConnected(true);
+      setSocketLive(true);
+      setServerReady(true);
+      httpModeRef.current = false;
       setJoinError(null);
       socket.emit("join-room", DEMO_ROOM_ID);
       const sid = sessionIdRef.current ?? localStorage.getItem(DEMO_SESSION_STORAGE_KEY);
@@ -83,11 +150,10 @@ export function useDemoGame() {
     };
 
     socket.on("connect", onConnect);
-    socket.on("disconnect", () => setConnected(false));
+    socket.on("disconnect", () => setSocketLive(false));
     socket.on("connect_error", () => {
-      if (!sessionIdRef.current) {
-        setJoinError("Socket offline — join still works via HTTP below");
-      }
+      httpModeRef.current = true;
+      void fetchLobby();
     });
 
     socket.on("demo-lobby-stats", (stats: DemoLobbyStats) => {
@@ -116,7 +182,17 @@ export function useDemoGame() {
     const stored = localStorage.getItem(DEMO_SESSION_STORAGE_KEY);
     if (stored) {
       setSessionId(stored);
-      syncSocket(stored);
+      if (socket.connected) {
+        syncSocket(stored);
+      } else {
+        void fetchState(stored).then((data) => {
+          if (!data) {
+            localStorage.removeItem(DEMO_SESSION_STORAGE_KEY);
+            setSessionId(null);
+            sessionIdRef.current = null;
+          }
+        });
+      }
     }
 
     return () => {
@@ -125,7 +201,17 @@ export function useDemoGame() {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [syncSocket]);
+  }, [syncSocket, fetchLobby, fetchState]);
+
+  useEffect(() => {
+    const sid = sessionId;
+    if (!sid) return;
+    if (socketLive && !httpModeRef.current) return;
+
+    void fetchState(sid);
+    const poll = setInterval(() => void fetchState(sid), 1500);
+    return () => clearInterval(poll);
+  }, [sessionId, socketLive, fetchState]);
 
   const applyJoinResult = useCallback(
     (res: JoinResult, valid: string) => {
@@ -137,7 +223,11 @@ export function useDemoGame() {
         setSessionId(res.sessionId);
         sessionIdRef.current = res.sessionId;
         localStorage.setItem(DEMO_SESSION_STORAGE_KEY, res.sessionId);
-        syncSocket(res.sessionId);
+        if (socketRef.current?.connected) {
+          syncSocket(res.sessionId);
+        } else {
+          httpModeRef.current = true;
+        }
       }
       if (res.state) setView(res.state);
       if (res.role) setRole(res.role);
@@ -164,7 +254,7 @@ export function useDemoGame() {
       setUsername(valid);
 
       try {
-        const res = await fetch("/api/demo/join", {
+        const res = await fetch(demoApiUrl("/api/demo/join"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -176,7 +266,7 @@ export function useDemoGame() {
         const data: JoinResult = await res.json();
         applyJoinResult(data, valid);
       } catch {
-        setJoinError("Network error — is the dev server running? (npm run dev)");
+        setJoinError("Network error — check your connection and try again");
       } finally {
         setJoining(false);
       }
@@ -184,42 +274,72 @@ export function useDemoGame() {
     [applyJoinResult]
   );
 
-  const leaveSeat = useCallback(() => {
-    socketRef.current?.emit("demo-leave-seat", (res: { ok: boolean; role?: DemoRole }) => {
-      if (res?.ok && res.role) setRole(res.role);
-    });
-  }, []);
-
-  const takeSeat = useCallback(() => {
-    socketRef.current?.emit("demo-take-seat", (res: { ok: boolean; error?: string; role?: DemoRole }) => {
-      if (!res?.ok) {
-        setJoinError(res?.error ?? "Could not take seat");
-        return;
-      }
-      if (res.role) setRole(res.role);
-      setJoinError(null);
-    });
-  }, []);
-
-  const startHand = useCallback(() => {
-    socketRef.current?.emit("demo-start-hand");
-  }, []);
-
-  const sendAction = useCallback(async (action: DemoAction) => {
-    setActionPending(true);
-    return new Promise<{ ok: boolean; error?: string }>((resolve) => {
-      const socket = socketRef.current;
-      if (!socket?.connected) {
-        setActionPending(false);
-        resolve({ ok: false, error: "Reconnecting…" });
-        return;
-      }
-      socket.emit("demo-action", action, (res: { ok: boolean; error?: string }) => {
-        setActionPending(false);
-        resolve(res ?? { ok: false });
+  const leaveSeat = useCallback(async () => {
+    const socket = socketRef.current;
+    if (socket?.connected && !httpModeRef.current) {
+      socket.emit("demo-leave-seat", (res: { ok: boolean; role?: DemoRole }) => {
+        if (res?.ok && res.role) setRole(res.role);
       });
-    });
-  }, []);
+      return;
+    }
+    const res = await demoHttpPost("/api/demo/leave-seat");
+    if (res?.ok && res.role) setRole(res.role);
+  }, [demoHttpPost]);
+
+  const takeSeat = useCallback(async () => {
+    const socket = socketRef.current;
+    if (socket?.connected && !httpModeRef.current) {
+      socket.emit("demo-take-seat", (res: { ok: boolean; error?: string; role?: DemoRole }) => {
+        if (!res?.ok) {
+          setJoinError(res?.error ?? "Could not take seat");
+          return;
+        }
+        if (res.role) setRole(res.role);
+        setJoinError(null);
+      });
+      return;
+    }
+    const res = await demoHttpPost("/api/demo/take-seat");
+    if (!res?.ok) {
+      setJoinError(res?.error ?? "Could not take seat");
+      return;
+    }
+    if (res.role) setRole(res.role);
+    setJoinError(null);
+  }, [demoHttpPost]);
+
+  const startHand = useCallback(async () => {
+    const socket = socketRef.current;
+    if (socket?.connected && !httpModeRef.current) {
+      socket.emit("demo-start-hand");
+      return;
+    }
+    await demoHttpPost("/api/demo/start-hand");
+  }, [demoHttpPost]);
+
+  const sendAction = useCallback(
+    async (action: DemoAction) => {
+      setActionPending(true);
+      const socket = socketRef.current;
+      if (socket?.connected && !httpModeRef.current) {
+        return new Promise<{ ok: boolean; error?: string }>((resolve) => {
+          socket.emit("demo-action", action, (res: { ok: boolean; error?: string }) => {
+            setActionPending(false);
+            resolve(res ?? { ok: false });
+          });
+        });
+      }
+      try {
+        const res = await demoHttpPost("/api/demo/action", { action });
+        setActionPending(false);
+        return { ok: Boolean(res?.ok), error: res?.error };
+      } catch {
+        setActionPending(false);
+        return { ok: false, error: "Network error" };
+      }
+    },
+    [demoHttpPost]
+  );
 
   const sendMessage = useCallback(
     (text: string, avatar?: string) => {
@@ -240,13 +360,16 @@ export function useDemoGame() {
   useEffect(() => {
     if (!sessionId || view) return;
     const timer = window.setTimeout(() => {
-      localStorage.removeItem(DEMO_SESSION_STORAGE_KEY);
-      setSessionId(null);
-      sessionIdRef.current = null;
-      setJoinError("Session expired — pick a username and join again");
-    }, 8000);
+      void fetchState(sessionId).then((data) => {
+        if (data?.state) return;
+        localStorage.removeItem(DEMO_SESSION_STORAGE_KEY);
+        setSessionId(null);
+        sessionIdRef.current = null;
+        setJoinError("Session expired — pick a username and join again");
+      });
+    }, 12000);
     return () => clearTimeout(timer);
-  }, [sessionId, view]);
+  }, [sessionId, view, fetchState]);
 
   const leaveTable = useCallback(() => {
     localStorage.removeItem(DEMO_SESSION_STORAGE_KEY);
@@ -258,7 +381,8 @@ export function useDemoGame() {
   }, []);
 
   return {
-    connected,
+    connected: serverReady,
+    socketLive,
     view,
     sessionId,
     role,

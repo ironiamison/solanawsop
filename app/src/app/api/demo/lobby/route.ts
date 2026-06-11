@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { lobbyStats } from "@/lib/demo/socket";
+import { handleDemoLobby } from "@/lib/demo/http-handlers";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  return NextResponse.json(lobbyStats());
+  return NextResponse.json(handleDemoLobby());
 }
