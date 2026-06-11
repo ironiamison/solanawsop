@@ -103,7 +103,7 @@ export default function DashboardSidebar({ balanceRaw = 0 }: { balanceRaw?: numb
   return (
     <aside className="hidden w-[228px] shrink-0 flex-col border-r border-white/[0.06] bg-[#070709] lg:flex">
       <div className="sidebar-brand-header border-b border-white/[0.06]">
-        <BrandWordLockup size="md" href="/" priority className="sidebar-brand-lockup" />
+        <BrandWordLockup size="sm" href="/" priority className="sidebar-brand-lockup" />
       </div>
 
       <nav className="flex-1 space-y-0.5 px-3 py-4">

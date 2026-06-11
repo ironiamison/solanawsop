@@ -17,7 +17,7 @@ export default function BrandHeaderLogo({
       size="sm"
       href={href}
       priority={priority}
-      showTagline
+      showTagline={false}
       className={className}
     />
   );

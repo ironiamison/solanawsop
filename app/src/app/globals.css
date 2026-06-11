@@ -816,6 +816,20 @@ body {
 
 .sidebar-brand-lockup {
   width: 100%;
+  max-width: 100%;
+}
+
+.sidebar-brand-lockup .brand-word-lockup-text {
+  min-width: 0;
+}
+
+.sidebar-brand-lockup .brand-word-lockup-tagline {
+  max-width: 11rem;
+}
+
+.sidebar-brand-lockup .brand-word-lockup-line {
+  flex: 0 1 1.25rem;
+  min-width: 0.35rem;
 }
 
 /* ── Brand word lockup (chip + SOLANAWSOP + tagline) ── */
@@ -919,18 +933,11 @@ body {
 }
 
 .topbar-brand-lockup.brand-word-lockup--sm {
-  gap: 0.5rem;
-  max-width: min(11.5rem, 42vw);
+  gap: 0.45rem;
 }
 
 .topbar-brand-lockup .brand-word-lockup-name {
-  font-size: 0.8125rem;
-}
-
-.topbar-brand-lockup .brand-word-lockup-tagline {
-  font-size: 0.375rem;
-  letter-spacing: 0.14em;
-  gap: 0.3rem;
+  font-size: 0.875rem;
 }
 
 .sidebar-brand-logo {

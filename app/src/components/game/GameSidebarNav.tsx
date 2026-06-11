@@ -98,7 +98,7 @@ export default function GameSidebarNav({
   return (
     <aside className="opoker-sidebar flex min-h-0 flex-col">
       <div className="sidebar-brand-header border-b border-white/[0.06]">
-        <BrandWordLockup size="md" href="/" priority className="sidebar-brand-lockup" />
+        <BrandWordLockup size="sm" href="/" priority className="sidebar-brand-lockup" />
       </div>
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
