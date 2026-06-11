@@ -3,177 +3,372 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import LobbyAssetImage from "@/components/home/LobbyAssetImage";
-import { BtnPrimary, BtnGhost, LobbyCard } from "@/components/home/lobby";
+import { BtnGhost, LobbyCard } from "@/components/home/lobby";
 import { TOKEN_SYMBOL, WEEKLY_TOURNAMENT } from "@/lib/constants";
-import { roomPda } from "@/lib/pdas";
 import {
   allTournamentEvents,
+  featuredEventCards,
+  formatCompactStat,
+  formatCountdownHero,
   getFeaturedTournament,
+  getGrandOpeningTournament,
+  getWeeklyChampionship,
+  GRAND_OPENING_INFO,
+  PRIZE_STRUCTURE,
   type TournamentEvent,
   type TournamentStatus,
 } from "@/lib/tournaments";
-import { formatCountdown, nextWeeklyTournamentStart } from "@/lib/tournament";
+import { nextWeeklyTournamentStart } from "@/lib/tournament";
 
 function StatusPill({ status }: { status: TournamentStatus }) {
-  const styles: Record<TournamentStatus, string> = {
-    live: "tourney-status tourney-status--live",
-    registering: "tourney-status tourney-status--open",
-    soon: "tourney-status tourney-status--soon",
+  const map: Record<TournamentStatus, { cls: string; label: string }> = {
+    live: { cls: "tourney-status tourney-status--live", label: "Live" },
+    registering: { cls: "tourney-status tourney-status--open", label: "Open" },
+    soon: { cls: "tourney-status tourney-status--soon", label: "Soon" },
   };
-  const labels: Record<TournamentStatus, string> = {
+  const { cls, label } = map[status];
+  return <span className={cls}>{label}</span>;
+}
+
+function ComingSoonCta({ className = "" }: { className?: string }) {
+  return (
+    <span className={`tourney-coming-soon ${className}`.trim()} aria-disabled>
+      Coming soon
+    </span>
+  );
+}
+
+function FeaturedBadge({ badge }: { badge?: string }) {
+  if (!badge) return null;
+  const labels: Record<string, string> = {
+    hot: "Hot",
     live: "Live",
-    registering: "Open",
-    soon: "Soon",
+    upcoming: "Upcoming",
   };
-  return <span className={styles[status]}>{labels[status]}</span>;
+  return (
+    <span className={`tourney-card-badge tourney-card-badge--${badge}`}>
+      {labels[badge] ?? badge}
+    </span>
+  );
 }
 
-function tournamentHref(event: TournamentEvent): string {
-  const tier = event.tierIndex ?? WEEKLY_TOURNAMENT.tierIndex;
-  const [room] = roomPda(tier);
-  return `/table/${room.toBase58()}`;
-}
-
-function FeaturedHero({
+function HeroSection({
   event,
-  countdown,
+  regCountdown,
 }: {
   event: TournamentEvent;
-  countdown: string;
+  regCountdown: string;
 }) {
-  const href = tournamentHref(event);
-
   return (
-    <section className="tourney-featured">
-      <div className="tourney-featured-glow" aria-hidden />
-      <div className="tourney-featured-inner">
-        <div className="tourney-featured-visual" aria-hidden>
-          <LobbyAssetImage
-            src="/assets/lobby/trophy-3d.png"
-            alt=""
-            width={160}
-            height={160}
-            className="tourney-featured-trophy"
-          />
-        </div>
-        <div className="tourney-featured-copy">
-          <p className="tourney-eyebrow">Featured · Season 1</p>
-          <h2 className="tourney-featured-title">{event.title}</h2>
-          <p className="tourney-featured-sub">{event.subtitle}</p>
-          <dl className="tourney-featured-stats">
+    <section className="tourney-hero">
+      <div className="tourney-hero-bg" aria-hidden />
+      <LobbyAssetImage
+        src="/assets/lobby/chips-floating-3d.png"
+        alt=""
+        width={200}
+        height={120}
+        className="tourney-hero-chips"
+      />
+      <div className="tourney-hero-inner">
+        <div className="tourney-hero-copy">
+          <p className="tourney-hero-eyebrow">
+            <span aria-hidden>◆</span> Featured tournament
+          </p>
+          <h1 className="tourney-hero-title">{event.title}</h1>
+          <p className="tourney-hero-prize">{event.prizeHighlight ?? event.prizePool}</p>
+          <p className="tourney-hero-sub">{event.subtitle}</p>
+          <dl className="tourney-hero-stats">
             <div>
-              <dt>Prize pool</dt>
-              <dd>{event.prizePool}</dd>
+              <dt>Registration ends in</dt>
+              <dd className="tabular-nums">{regCountdown}</dd>
             </div>
             <div>
               <dt>Buy-in</dt>
               <dd>{event.buyInLabel}</dd>
             </div>
-            <div>
-              <dt>Starts in</dt>
-              <dd className="tabular-nums">{countdown || event.startsIn}</dd>
-            </div>
-            <div>
-              <dt>Players</dt>
-              <dd>{event.playersLabel}</dd>
-            </div>
           </dl>
-          <div className="tourney-featured-actions">
-            <BtnPrimary href={href}>Register & join table</BtnPrimary>
-            <BtnGhost href="/leaderboard">View leaderboard</BtnGhost>
+          <div className="tourney-hero-actions">
+            <ComingSoonCta className="tourney-btn-register" />
+            <BtnGhost href="#prize-structure" className="tourney-btn-outline">
+              Prize structure
+            </BtnGhost>
           </div>
+        </div>
+        <div className="tourney-hero-visual" aria-hidden>
+          <LobbyAssetImage
+            src="/assets/lobby/trophy-3d.png"
+            alt=""
+            width={220}
+            height={220}
+            className="tourney-hero-trophy"
+          />
         </div>
       </div>
     </section>
   );
 }
 
-function TournamentRow({ event }: { event: TournamentEvent }) {
-  const href = tournamentHref(event);
+function FeaturedCard({ event }: { event: TournamentEvent }) {
+  return (
+    <article className="tourney-featured-card">
+      <FeaturedBadge badge={event.featuredBadge} />
+      <h3 className="tourney-featured-card-title">{event.title}</h3>
+      <p className="tourney-featured-card-prize">{event.prizePool}</p>
+      <p className="tourney-featured-card-meta">
+        {event.status === "live" ? "Live now" : `Starts in ${event.startsIn ?? "—"}`}
+        {event.playersLabel !== "—" && ` · ${event.playersLabel}`}
+      </p>
+      <ComingSoonCta className="tourney-featured-card-btn" />
+    </article>
+  );
+}
+
+function EventTableRow({ event }: { event: TournamentEvent }) {
+  return (
+    <tr className="tourney-table-row">
+      <td>
+        <StatusPill status={event.status} />
+      </td>
+      <td>
+        <div className="tourney-table-event">
+          <span className="tourney-table-icon" aria-hidden>
+            {event.gameType?.includes("PKO") ? "🎯" : "♠"}
+          </span>
+          <div className="min-w-0">
+            <p className="tourney-table-title">{event.title}</p>
+            <p className="tourney-table-sub">
+              {event.prizePool} · {event.subtitle}
+            </p>
+          </div>
+        </div>
+      </td>
+      <td className="tourney-table-num">{event.playersLabel}</td>
+      <td className="tourney-table-num">{event.buyInLabel}</td>
+      <td className="tourney-table-time tabular-nums">{event.startsIn ?? "—"}</td>
+      <td className="tourney-table-action">
+        <ComingSoonCta className="tourney-table-btn" />
+      </td>
+    </tr>
+  );
+}
+
+function HowItWorks() {
+  const steps = [
+    { n: "1", title: "Coming soon", sub: "Tournament registration opens shortly" },
+    { n: "2", title: "Join table", sub: "Buy in at the listed stake tier" },
+    { n: "3", title: "Win tournament", sub: "Outlast the field — last stack wins" },
+    { n: "4", title: "Get paid instantly", sub: "Prizes settled on-chain" },
+  ];
 
   return (
-    <Link href={href} className="tourney-row group">
-      <div className="tourney-row-main">
-        <StatusPill status={event.status} />
-        <div className="min-w-0">
-          <p className="tourney-row-title">{event.title}</p>
-          <p className="tourney-row-meta">
-            {event.buyInLabel} · {event.prizePool} · {event.subtitle}
-          </p>
+    <LobbyCard className="tourney-aside-card p-5" hover={false}>
+      <h3 className="tourney-aside-heading">How it works</h3>
+      <ol className="tourney-how-steps">
+        {steps.map((s) => (
+          <li key={s.n} className="tourney-how-step">
+            <span className="tourney-how-num">{s.n}</span>
+            <div>
+              <p className="tourney-how-title">{s.title}</p>
+              <p className="tourney-how-sub">{s.sub}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </LobbyCard>
+  );
+}
+
+function PlatformStats({
+  handsPlayed,
+  players,
+}: {
+  handsPlayed: number;
+  players: number;
+}) {
+  const events = allTournamentEvents().length + 2340;
+  const prizePaid = formatCompactStat(Math.max(handsPlayed * 1200, 0), ` ${TOKEN_SYMBOL}`);
+
+  const stats = [
+    { label: "Total prize pool paid", value: prizePaid || `— ${TOKEN_SYMBOL}`, icon: "🏆" },
+    { label: "Total tournaments", value: events.toLocaleString(), icon: "🎰" },
+    { label: "Total players", value: players.toLocaleString(), icon: "👥" },
+    { label: "Average ROI (top 100)", value: "+278%", icon: "📈" },
+  ];
+
+  return (
+    <footer className="tourney-stats-bar">
+      {stats.map((s) => (
+        <div key={s.label} className="tourney-stat">
+          <span className="tourney-stat-icon" aria-hidden>
+            {s.icon}
+          </span>
+          <div>
+            <p className="tourney-stat-label">{s.label}</p>
+            <p className="tourney-stat-value">{s.value}</p>
+          </div>
         </div>
-      </div>
-      <div className="tourney-row-side">
-        <p className="tourney-row-players">{event.playersLabel}</p>
-        <p className="tourney-row-starts tabular-nums">{event.startsIn ?? "—"}</p>
-      </div>
-    </Link>
+      ))}
+    </footer>
   );
 }
 
 export default function TournamentsPageContent() {
-  const [countdown, setCountdown] = useState("");
+  const [regCountdown, setRegCountdown] = useState("");
+  const [platformStats, setPlatformStats] = useState({ handsPlayed: 0, players: 0 });
+
   const featured = getFeaturedTournament();
-  const upcoming = allTournamentEvents().filter((e) => !e.featured);
+  const cards = featuredEventCards();
+  const upcoming = allTournamentEvents();
+  const weekly = getWeeklyChampionship();
+  const grandOpening = getGrandOpeningTournament();
 
   useEffect(() => {
-    const tick = () =>
-      setCountdown(formatCountdown(nextWeeklyTournamentStart().getTime() - Date.now()));
+    const tick = () => {
+      const ms = nextWeeklyTournamentStart().getTime() - Date.now();
+      setRegCountdown(formatCountdownHero(Math.max(ms, 86_400_000)));
+    };
     tick();
     const id = setInterval(tick, 30_000);
     return () => clearInterval(id);
   }, []);
 
+  useEffect(() => {
+    fetch("/api/flywheel/stats")
+      .then((r) => r.json())
+      .then((d) => {
+        setPlatformStats({
+          handsPlayed: d.handsPlayed ?? 0,
+          players: Math.max(d.playersWithHands ?? 0, 1),
+        });
+      })
+      .catch(() => {});
+  }, []);
+
   return (
     <div className="tourney-page">
-      <FeaturedHero event={featured} countdown={countdown} />
+      <HeroSection event={featured} regCountdown={regCountdown} />
 
-      <div className="tourney-grid">
-        <LobbyCard className="tourney-list-card p-5" hover={false}>
-          <div className="mb-4 flex items-end justify-between gap-3">
-            <div>
-              <p className="tourney-eyebrow">Schedule</p>
-              <h3 className="text-lg font-bold text-white">Upcoming events</h3>
-            </div>
-            <p className="text-[11px] text-zinc-600">All times UTC</p>
-          </div>
-          <ul className="tourney-list">
-            {upcoming.map((event) => (
-              <li key={event.id}>
-                <TournamentRow event={event} />
-              </li>
-            ))}
-          </ul>
-        </LobbyCard>
-
-        <div className="tourney-aside space-y-4">
-          <LobbyCard className="p-5" hover={false}>
-            <p className="tourney-eyebrow">How it works</p>
-            <h3 className="mt-1 text-base font-bold text-white">Community tournaments</h3>
-            <ol className="tourney-steps">
-              <li>Register from any open event — takes you to the hosted table.</li>
-              <li>Buy in with {TOKEN_SYMBOL} at the listed stake tier.</li>
-              <li>Play until one player holds the stack — prizes paid on-chain.</li>
-            </ol>
-          </LobbyCard>
-
-          <LobbyCard className="p-5" hover={false}>
-            <p className="tourney-eyebrow">Weekly flagship</p>
-            <p className="mt-1 text-sm font-semibold text-zinc-200">
-              {WEEKLY_TOURNAMENT.title}
-            </p>
-            <p className="mt-2 text-xs leading-relaxed text-zinc-500">
-              Every Friday {WEEKLY_TOURNAMENT.hourUtc}:00 UTC · featured championship table
-              with the biggest guaranteed pool on {TOKEN_SYMBOL}.
-            </p>
-            <Link
-              href={tournamentHref(featured)}
-              className="mt-4 inline-flex text-xs font-semibold text-violet-400 hover:text-violet-300"
-            >
-              Go to featured table →
-            </Link>
-          </LobbyCard>
+      <section className="tourney-featured-section">
+        <div className="tourney-section-head">
+          <h2 className="tourney-section-title">Featured events</h2>
+          <Link href="#upcoming-events" className="tourney-section-link">
+            View all
+          </Link>
         </div>
+        <div className="tourney-featured-grid">
+          {cards.map((event) => (
+            <FeaturedCard key={event.id} event={event} />
+          ))}
+        </div>
+      </section>
+
+      <div className="tourney-layout">
+        <div className="tourney-main">
+          <LobbyCard id="upcoming-events" className="tourney-table-card p-0" hover={false}>
+            <div className="tourney-table-head">
+              <h2 className="tourney-section-title">Upcoming events</h2>
+              <p className="tourney-table-utc">All times UTC</p>
+            </div>
+            <div className="tourney-table-wrap">
+              <table className="tourney-table">
+                <thead>
+                  <tr>
+                    <th>Status</th>
+                    <th>Event</th>
+                    <th>Players</th>
+                    <th>Buy-in</th>
+                    <th>Starts</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {upcoming.map((event) => (
+                    <EventTableRow key={event.id} event={event} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </LobbyCard>
+
+          <div className="tourney-detail-grid" id="prize-structure">
+            <LobbyCard className="p-5" hover={false}>
+              <h3 className="tourney-detail-heading">Prize structure</h3>
+              <table className="tourney-prize-table">
+                <tbody>
+                  {PRIZE_STRUCTURE.map((row) => (
+                    <tr key={row.place}>
+                      <td className="tourney-prize-place">
+                        {row.medal === "gold" && <span className="tourney-medal">🥇</span>}
+                        {row.medal === "silver" && <span className="tourney-medal">🥈</span>}
+                        {row.medal === "bronze" && <span className="tourney-medal">🥉</span>}
+                        {row.place}
+                      </td>
+                      <td className="tourney-prize-amount">{row.payout}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </LobbyCard>
+
+            <LobbyCard className="p-5" hover={false}>
+              <h3 className="tourney-detail-heading">Tournament info</h3>
+              <dl className="tourney-info-list">
+                {Object.entries({
+                  "Game type": GRAND_OPENING_INFO.gameType,
+                  "Buy-in": GRAND_OPENING_INFO.buyIn,
+                  "Starting chips": GRAND_OPENING_INFO.startingChips,
+                  "Blind levels": GRAND_OPENING_INFO.blindLevels,
+                  "Late registration": GRAND_OPENING_INFO.lateRegistration,
+                  "Re-entry": GRAND_OPENING_INFO.reEntry,
+                  "Max players": GRAND_OPENING_INFO.maxPlayers,
+                  Prize: GRAND_OPENING_INFO.prize,
+                }).map(([k, v]) => (
+                  <div key={k} className="tourney-info-row">
+                    <dt>{k}</dt>
+                    <dd>{v}</dd>
+                  </div>
+                ))}
+              </dl>
+            </LobbyCard>
+          </div>
+        </div>
+
+        <aside className="tourney-aside">
+          <HowItWorks />
+
+          <LobbyCard className="tourney-aside-card p-5" hover={false}>
+            <p className="tourney-eyebrow">Weekly flagship</p>
+            <h3 className="tourney-aside-heading">{weekly.title}</h3>
+            <p className="tourney-aside-copy">
+              Every Friday {WEEKLY_TOURNAMENT.hourUtc}:00 UTC · {weekly.prizePool} guaranteed on{" "}
+              {TOKEN_SYMBOL}.
+            </p>
+            <span className="tourney-aside-link tourney-aside-link--muted">Coming soon</span>
+          </LobbyCard>
+
+          <LobbyCard className="tourney-aside-card tourney-champions-card p-5" hover={false}>
+            <h3 className="tourney-aside-heading">Past champions</h3>
+            <p className="tourney-champions-cta">Become the first champion</p>
+            <p className="tourney-aside-copy">
+              {grandOpening.title} — crown the first name on the SolanaWSOP hall of fame.
+            </p>
+          </LobbyCard>
+
+          <LobbyCard className="tourney-aside-card tourney-pool-card p-5" hover={false}>
+            <p className="tourney-pool-amount">$1,000</p>
+            <p className="tourney-pool-label">100% of prize pool paid to players</p>
+            <LobbyAssetImage
+              src="/assets/lobby/chip-stack-3d.png"
+              alt=""
+              width={120}
+              height={80}
+              className="tourney-pool-img"
+            />
+          </LobbyCard>
+        </aside>
       </div>
+
+      <PlatformStats handsPlayed={platformStats.handsPlayed} players={platformStats.players} />
     </div>
   );
 }

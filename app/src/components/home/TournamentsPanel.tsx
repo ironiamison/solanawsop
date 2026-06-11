@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import LobbyAssetImage from "./LobbyAssetImage";
 import { getFeaturedTournament, UPCOMING_TOURNAMENTS } from "@/lib/tournaments";
 import { formatCountdown, nextWeeklyTournamentStart } from "@/lib/tournament";
-import { roomPda } from "@/lib/pdas";
 import { BtnBlockLabel, LobbyCard, SectionTitle, TextLink } from "./lobby";
 
 function FeaturedTrophy() {
@@ -29,8 +28,6 @@ function FeaturedTrophy() {
 export default function TournamentsPanel() {
   const [countdown, setCountdown] = useState("");
   const featured = getFeaturedTournament();
-  const [room] = roomPda(featured.tierIndex ?? 1);
-  const href = `/table/${room.toBase58()}`;
 
   useEffect(() => {
     const tick = () =>
@@ -46,10 +43,7 @@ export default function TournamentsPanel() {
         Tournaments
       </SectionTitle>
 
-      <Link
-        href={href}
-        className="group mb-3 block overflow-hidden rounded-xl border border-white/[0.08] bg-gradient-to-br from-[#0c0a10] to-[#08080c] p-4 transition hover:border-amber-500/20 hover:shadow-[0_8px_32px_rgba(245,158,11,0.06)]"
-      >
+      <div className="group mb-3 overflow-hidden rounded-xl border border-white/[0.08] bg-gradient-to-br from-[#0c0a10] to-[#08080c] p-4">
         <div className="flex items-start gap-3">
           <FeaturedTrophy />
           <div className="min-w-0 flex-1 pt-0.5">
@@ -67,8 +61,8 @@ export default function TournamentsPanel() {
             </p>
           </div>
         </div>
-        <BtnBlockLabel className="mt-4 group-hover:brightness-110">Join now</BtnBlockLabel>
-      </Link>
+        <BtnBlockLabel className="mt-4 opacity-60">Coming soon</BtnBlockLabel>
+      </div>
 
       <ul className="space-y-2">
         {UPCOMING_TOURNAMENTS.slice(0, 2).map((t) => (
