@@ -66,6 +66,8 @@ export interface DemoRoomView {
   lastHandWin: DemoHandWin | null;
   /** Unix ms when the next hand auto-starts (null if not scheduled) */
   autoDealAt: number | null;
+  /** Monotonic state revision for stale-client detection */
+  stateSeq?: number;
 }
 
 export type DemoAction =

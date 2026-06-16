@@ -113,6 +113,7 @@ export async function withChipRoom<T>(
     room.tick();
     const result = await fn(room);
     room.reconcileSeats();
+    room.bumpRevision();
     await saveChipRoom(room);
     return result;
   }
@@ -132,9 +133,10 @@ export async function withChipRoom<T>(
     try {
       const room = await loadChipRoom(roomId, opts);
       room.tick();
-      const result = await fn(room);
-      await saveChipRoom(room);
-      return result;
+    const result = await fn(room);
+    room.bumpRevision();
+    await saveChipRoom(room);
+    return result;
     } finally {
       await releaseLock(redis, roomId);
     }

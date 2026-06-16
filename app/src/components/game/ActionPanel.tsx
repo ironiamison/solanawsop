@@ -92,8 +92,8 @@ export default function ActionPanel({
   const raiseIncrement = clampedBet - currentBet;
   const betReady =
     canBetOrRaise &&
-    raiseIncrement >= effectiveMinRaise &&
-    clampedBet <= maxRaiseTo;
+    (clampedBet === maxRaiseTo ||
+      (raiseIncrement >= effectiveMinRaise && clampedBet <= maxRaiseTo));
 
   const showTimer =
     visible && timerSecondsLeft !== undefined && timerProgress !== undefined;

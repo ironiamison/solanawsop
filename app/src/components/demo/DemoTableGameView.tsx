@@ -88,7 +88,6 @@ export default function DemoTableGameView({
   const [betAmount, setBetAmount] = useState(0);
   const [dealCountdown, setDealCountdown] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const autoFoldSent = useRef(false);
   const lastBetTurnKey = useRef("");
 
   const runAction = async (action: Parameters<typeof sendAction>[0]) => {
@@ -134,7 +133,7 @@ export default function DemoTableGameView({
     room.currentTurnSeat === myPlayer.seat;
 
   const turnTimerActive = !!(isMyTurn && myPlayer && view?.turnStartedAt);
-  const { secondsLeft, progress, expired, urgent, phase: timerPhase } =
+  const { secondsLeft, progress, urgent, phase: timerPhase } =
     useTurnTimer(turnTimerActive, view?.turnStartedAt, myDemoPlayer?.timeBankMs ?? 0);
 
   const { winToast, dismissWinToast } = useHandWinCelebration(
@@ -145,7 +144,9 @@ export default function DemoTableGameView({
   const inHand = !!myPlayer && room && room.phase !== "waiting";
 
   const callAmount =
-    myPlayer && room ? Math.max(0, room.currentBet - myPlayer.roundBet) : 0;
+    myPlayer && room
+      ? Math.min(Math.max(0, room.currentBet - myPlayer.roundBet), myPlayer.stack)
+      : 0;
 
   useEffect(() => {
     if (!myPlayer || !room || !isMyTurn) return;
@@ -161,19 +162,6 @@ export default function DemoTableGameView({
         : Math.min(maxRaiseTo, room.currentBet + minRaise);
     setBetAmount(minRaiseTo);
   }, [myPlayer, room, isMyTurn, view?.turnStartedAt]);
-
-  useEffect(() => {
-    autoFoldSent.current = false;
-  }, [view?.turnStartedAt, view?.currentTurnSeat, view?.phase]);
-
-  useEffect(() => {
-    if (!expired || !isMyTurn || !myPlayer || !room || actionPending || autoFoldSent.current) {
-      return;
-    }
-    autoFoldSent.current = true;
-    const canCheck = myPlayer.roundBet >= room.currentBet;
-    void runAction(canCheck ? { type: "check" } : { type: "fold" });
-  }, [expired, isMyTurn, myPlayer, room, actionPending]);
 
   const spectatorCount = view?.spectators.length ?? 0;
   const isFull = (view?.playerCount ?? 0) >= 6;

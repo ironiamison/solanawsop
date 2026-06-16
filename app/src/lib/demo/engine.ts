@@ -68,6 +68,8 @@ export class DemoRoomEngine {
   autoDealAt: number | null = null;
   /** Wall-clock end of showdown reveal — persisted so serverless ticks can finish the hand */
   showdownEndsAt: number | null = null;
+  /** Monotonic revision — clients ignore stale HTTP poll payloads */
+  stateSeq = 0;
 
   private showdownTimer: ReturnType<typeof setTimeout> | null = null;
   private stateListeners = new Set<() => void>();
@@ -100,6 +102,11 @@ export class DemoRoomEngine {
 
   private emitStateChange(): void {
     for (const listener of this.stateListeners) listener();
+  }
+
+  /** Called once per persisted mutation (HTTP/socket request). */
+  bumpRevision(): void {
+    this.stateSeq++;
   }
 
   private clearShowdownTimer(): void {
@@ -273,6 +280,10 @@ export class DemoRoomEngine {
   }
 
   joinAsSpectator(sessionId: string, username: string, socketId: string): void {
+    const seated = this.players.get(sessionId);
+    if (seated && this.phase !== "waiting") {
+      return;
+    }
     this.players.delete(sessionId);
     const seatIdx = this.seatToSession.findIndex((s) => s === sessionId);
     if (seatIdx >= 0) this.seatToSession[seatIdx] = null;
@@ -672,14 +683,19 @@ export class DemoRoomEngine {
       case "raise": {
         const toCall = this.currentBet - player.roundBet;
         const total = toCall + action.amount;
-        if (action.amount < this.minRaise) {
+        if (total > player.stack) {
+          return { ok: false, error: "Insufficient stack" };
+        }
+        const isAllIn = total >= player.stack;
+        if (!isAllIn && action.amount < this.minRaise) {
           return { ok: false, error: `Min raise is ${this.minRaise}` };
         }
-        if (total > player.stack) return { ok: false, error: "Insufficient stack" };
         this.deductBet(player, total);
         this.currentBet = player.roundBet;
-        this.minRaise = action.amount;
-        this.lastRaiserSeat = player.seat;
+        if (!isAllIn && action.amount >= this.minRaise) {
+          this.minRaise = action.amount;
+          this.lastRaiserSeat = player.seat;
+        }
         if (player.stack === 0) player.status = "allIn";
         player.hasActed = true;
         for (const p of this.players.values()) {
@@ -787,7 +803,7 @@ export class DemoRoomEngine {
     }
 
     this.currentBet = 0;
-    this.minRaise = DEMO_BIG_BLIND;
+    this.minRaise = this.bigBlindAmount();
     for (const p of this.players.values()) {
       if (p.status === "active" || p.status === "allIn") {
         p.hasActed = false;
@@ -826,6 +842,7 @@ export class DemoRoomEngine {
     if (this.countContenders() <= 1) return;
     this.advanceTurn();
     this.tryAdvanceStreet();
+    this.tryRunOutBoard();
   }
 
   private recordHandWin(winnerSessionIds: string[], pot: number): void {
@@ -869,35 +886,96 @@ export class DemoRoomEngine {
       return;
     }
 
-    let best = evaluateHand(contenders[0].holeCards, community);
-    let winners: DemoPlayer[] = [contenders[0]];
-    for (let i = 1; i < contenders.length; i++) {
-      const p = contenders[i];
-      const rank = evaluateHand(p.holeCards, community);
-      const cmp = compareHands(rank, best);
-      if (cmp > 0) {
-        best = rank;
-        winners = [p];
-      } else if (cmp === 0) {
-        winners.push(p);
-      }
+    const { winnerAmounts, winnerIds } = this.distributeSidePots(community, contenders);
+    const totalWon = [...winnerAmounts.values()].reduce((a, b) => a + b, 0);
+    for (const [sessionId, amount] of winnerAmounts) {
+      const p = this.players.get(sessionId);
+      if (p) p.stack += amount;
     }
 
-    const pot = this.pot;
-    const share = Math.floor(pot / winners.length);
-    const remainder = pot % winners.length;
-    winners.forEach((w, i) => {
-      w.stack += share + (i === 0 ? remainder : 0);
-    });
-    this.recordHandWin(
-      winners.map((w) => w.sessionId),
-      pot
-    );
-    this.statusMessage =
-      winners.length === 1
-        ? `${winners[0].username} wins ${this.formatPot(pot)}`
-        : `Split pot — ${winners.map((w) => w.username).join(", ")}`;
+    const uniqueWinners = [...new Set(winnerIds)];
+    this.recordHandWin(uniqueWinners, totalWon || this.pot);
+
+    if (uniqueWinners.length === 1) {
+      const w = this.players.get(uniqueWinners[0]);
+      this.statusMessage = w
+        ? `${w.username} wins ${this.formatPot(totalWon || this.pot)}`
+        : null;
+    } else {
+      const names = uniqueWinners
+        .map((id) => this.players.get(id)?.username)
+        .filter(Boolean)
+        .join(", ");
+      this.statusMessage = names
+        ? `Split pot — ${names}`
+        : null;
+    }
     this.beginShowdown();
+  }
+
+  /** Side-pot distribution ported from on-chain game_logic.rs */
+  private distributeSidePots(
+    community: number[],
+    contenders: DemoPlayer[]
+  ): { winnerAmounts: Map<string, number>; winnerIds: string[] } {
+    const contributions = contenders
+      .map((p) => ({ sessionId: p.sessionId, totalBet: p.totalBet, player: p }))
+      .sort((a, b) => a.totalBet - b.totalBet);
+
+    const pots: { amount: number; eligible: DemoPlayer[] }[] = [];
+    let prevLevel = 0;
+
+    for (let i = 0; i < contributions.length; i++) {
+      const level = contributions[i].totalBet;
+      if (level <= prevLevel) continue;
+      const increment = level - prevLevel;
+      const eligible = contributions
+        .filter((c) => c.totalBet >= level)
+        .map((c) => c.player);
+      const potAmount = increment * eligible.length;
+      if (potAmount > 0) {
+        pots.push({ amount: potAmount, eligible });
+      }
+      prevLevel = level;
+    }
+
+    if (pots.length === 0) {
+      pots.push({ amount: this.pot, eligible: contenders });
+    }
+
+    const winnerAmounts = new Map<string, number>();
+    const winnerIds: string[] = [];
+
+    for (const { amount, eligible } of pots) {
+      let best = evaluateHand(eligible[0].holeCards, community);
+      let winners: DemoPlayer[] = [eligible[0]];
+      for (let i = 1; i < eligible.length; i++) {
+        const p = eligible[i];
+        const rank = evaluateHand(p.holeCards, community);
+        const cmp = compareHands(rank, best);
+        if (cmp > 0) {
+          best = rank;
+          winners = [p];
+        } else if (cmp === 0) {
+          winners.push(p);
+        }
+      }
+
+      const ordered = winners.sort(
+        (a, b) =>
+          ((a.seat - this.dealerSeat + DEMO_MAX_PLAYERS) % DEMO_MAX_PLAYERS) -
+          ((b.seat - this.dealerSeat + DEMO_MAX_PLAYERS) % DEMO_MAX_PLAYERS)
+      );
+      const share = Math.floor(amount / ordered.length);
+      const remainder = amount % ordered.length;
+      ordered.forEach((w, i) => {
+        const win = share + (i === 0 ? remainder : 0);
+        winnerAmounts.set(w.sessionId, (winnerAmounts.get(w.sessionId) ?? 0) + win);
+        winnerIds.push(w.sessionId);
+      });
+    }
+
+    return { winnerAmounts, winnerIds };
   }
 
   /** Reveal cards briefly before clearing the table */
@@ -948,7 +1026,7 @@ export class DemoRoomEngine {
       .map((p) => {
         const hideCards =
           this.phase === "waiting" ||
-          (!showAllCards && p.sessionId !== forSessionId && p.status !== "folded");
+          (!showAllCards && p.sessionId !== forSessionId);
         return {
           sessionId: p.sessionId,
           username: p.username,
@@ -989,6 +1067,7 @@ export class DemoRoomEngine {
       handNumber: this.handNumber,
       lastHandWin: this.lastHandWin,
       autoDealAt: this.autoDealAt,
+      stateSeq: this.stateSeq,
     };
   }
 
@@ -1012,6 +1091,7 @@ export class DemoRoomEngine {
       lastHandWin: this.lastHandWin,
       autoDealAt: this.autoDealAt,
       showdownEndsAt: this.showdownEndsAt,
+      stateSeq: this.stateSeq,
       roomId: this.roomId,
       startStack: this.startStack,
       players: [...this.players.values()],
@@ -1040,8 +1120,9 @@ export class DemoRoomEngine {
     this.lastHandWin = s.lastHandWin ?? null;
     this.autoDealAt = s.autoDealAt ?? null;
     this.showdownEndsAt = s.showdownEndsAt ?? null;
+    this.stateSeq = s.stateSeq ?? 0;
     if (this.phase === "showdown" && !this.showdownEndsAt) {
-      this.showdownEndsAt = Date.now();
+      this.showdownEndsAt = Date.now() + SHOWDOWN_DELAY_MS;
     }
     this.players = new Map(
       s.players.map((p) => [
@@ -1088,6 +1169,7 @@ export interface DemoRoomSnapshot {
   lastHandWin: DemoHandWin | null;
   autoDealAt: number | null;
   showdownEndsAt?: number | null;
+  stateSeq?: number;
   roomId: string;
   startStack: number;
   players: DemoPlayer[];

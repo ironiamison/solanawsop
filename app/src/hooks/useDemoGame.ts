@@ -101,6 +101,24 @@ export function useDemoGame() {
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [seatDesync, setSeatDesync] = useState(false);
   const reclaimAttemptedRef = useRef(false);
+  const lastStateSeqRef = useRef(0);
+
+  const applyStateIfFresh = useCallback(
+    (
+      state: DemoRoomView,
+      sid: string,
+      opts?: { force?: boolean }
+    ): boolean => {
+      const seq = state.stateSeq ?? 0;
+      if (!opts?.force && seq > 0 && seq < lastStateSeqRef.current) {
+        return false;
+      }
+      if (seq > 0) lastStateSeqRef.current = seq;
+      applyViewRole(state, sid, setView, setRole, setLobbyStats, setUsername);
+      return true;
+    },
+    []
+  );
 
   const applyTables = useCallback((next: DemoTableInfo[]) => {
     setTables(next);
@@ -151,14 +169,14 @@ export function useDemoGame() {
         localStorage.setItem(DEMO_ROOM_STORAGE_KEY, data.roomId);
       }
       if (data.state) {
-        applyViewRole(data.state, sid, setView, setRole, setLobbyStats, setUsername);
+        applyStateIfFresh(data.state, sid, { force: !data.state.stateSeq });
       }
       if (data.lobby) setLobbyStats(data.lobby);
       return data;
     } catch {
       return null;
     }
-  }, []);
+  }, [applyStateIfFresh]);
 
   const demoHttpPost = useCallback(
     async (path: string, body: Record<string, unknown> = {}) => {
@@ -180,7 +198,7 @@ export function useDemoGame() {
         localStorage.setItem(DEMO_ROOM_STORAGE_KEY, data.roomId);
       }
       if (data.state) {
-        applyViewRole(data.state, sid, setView, setRole, setLobbyStats, setUsername);
+        applyStateIfFresh(data.state, sid, { force: !data.state.stateSeq });
         setSeatDesync(false);
       }
       if (data.lobby) setLobbyStats(data.lobby);
@@ -204,7 +222,7 @@ export function useDemoGame() {
           localStorage.setItem(DEMO_ROOM_STORAGE_KEY, res.roomId);
         }
         if (res?.state) {
-          applyViewRole(res.state, sid, setView, setRole, setLobbyStats, setUsername);
+          applyStateIfFresh(res.state, sid, { force: !res.state.stateSeq });
           setSeatDesync(false);
         }
       }
@@ -266,7 +284,7 @@ export function useDemoGame() {
     socket.on("demo-state", (state: DemoRoomView) => {
       const sid = sessionIdRef.current;
       if (sid) {
-        applyViewRole(state, sid, setView, setRole, setLobbyStats, setUsername);
+        applyStateIfFresh(state, sid, { force: !state.stateSeq });
       } else {
         setView(state);
       }
@@ -335,7 +353,8 @@ export function useDemoGame() {
     const sid = sessionId;
     if (!sid) return;
 
-    const ms = socketLive && !httpModeRef.current ? 1500 : 1000;
+    const httpOnly = httpModeRef.current || !socketLive;
+    const ms = httpOnly ? 1000 : 2500;
     void fetchState(sid, roomIdRef.current);
     const poll = setInterval(() => void fetchState(sid, roomIdRef.current), ms);
     return () => clearInterval(poll);
@@ -375,7 +394,10 @@ export function useDemoGame() {
           httpModeRef.current = true;
         }
       }
-      if (res.state) setView(res.state);
+      if (res.state) {
+        lastStateSeqRef.current = res.state.stateSeq ?? 0;
+        setView(res.state);
+      }
       if (res.role) setRole(res.role);
       if (res.notice) setJoinNotice(res.notice);
       setUsername(valid);
@@ -667,6 +689,7 @@ export function useDemoGame() {
     localStorage.removeItem(DEMO_ROOM_STORAGE_KEY);
     localStorage.removeItem(DEMO_USERNAME_STORAGE_KEY);
     reclaimAttemptedRef.current = false;
+    lastStateSeqRef.current = 0;
     setSessionId(null);
     sessionIdRef.current = null;
     setView(null);
