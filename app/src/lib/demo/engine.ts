@@ -7,6 +7,7 @@ import {
 import { formatTokens } from "@/lib/constants";
 import {
   AUTO_DEAL_DELAY_MS,
+  AUTO_DEAL_FIRST_HAND_MS,
   DEMO_BIG_BLIND,
   DEMO_BUY_IN,
   DEMO_MAX_PLAYERS,
@@ -344,7 +345,14 @@ export class DemoRoomEngine {
   }
 
   private scheduleAutoDeal(): void {
-    this.autoDealAt = Date.now() + AUTO_DEAL_DELAY_MS;
+    const delay =
+      this.handNumber === 0 ? AUTO_DEAL_FIRST_HAND_MS : AUTO_DEAL_DELAY_MS;
+    this.autoDealAt = Date.now() + delay;
+  }
+
+  /** True when a hand can be dealt (2+ seated players with chips, not sitting out). */
+  canStartHand(): boolean {
+    return this.phase === "waiting" && this.readyToPlayPlayers().length >= 2;
   }
 
   scheduleAutoDealIfReady(): void {
@@ -355,9 +363,16 @@ export class DemoRoomEngine {
     if (this.phase !== "waiting") return;
     if (this.readyToPlayPlayers().length < 2) {
       this.clearAutoDealSchedule();
+      this.statusMessage =
+        this.players.size >= 1
+          ? "Waiting for one more player…"
+          : "Waiting for players…";
       return;
     }
-    if (!this.autoDealAt) this.scheduleAutoDeal();
+    if (!this.autoDealAt) {
+      this.scheduleAutoDeal();
+      this.statusMessage = null;
+    }
   }
 
   removePlayer(sessionId: string): void {
@@ -507,6 +522,10 @@ export class DemoRoomEngine {
   }
 
   startHand(_requesterId: string): { ok: true } | { ok: false; error: string } {
+    if (!this.canStartHand()) {
+      return { ok: false, error: "Need at least 2 players not sitting out" };
+    }
+    this.clearAutoDealSchedule();
     return this.startHandInternal();
   }
 

@@ -40,6 +40,7 @@ export type DemoTableGame = {
   actionPending: boolean;
   leaveSeat: () => Promise<void>;
   takeSeat: () => Promise<void>;
+  startHand: () => Promise<void>;
   setSitOut: (sitOut: boolean) => Promise<{ ok: boolean; error?: string }>;
   sendAction: (action: DemoAction) => Promise<{ ok: boolean; error?: string }>;
   sendMessage: (text: string, avatar?: string) => Promise<void>;
@@ -77,6 +78,7 @@ export default function DemoTableGameView({
     reconnectSeat = async () => {},
     leaveSeat,
     takeSeat,
+    startHand,
     setSitOut,
     sendAction,
     sendMessage,
@@ -202,10 +204,21 @@ export default function DemoTableGameView({
     return () => window.clearInterval(id);
   }, [view?.autoDealAt, view?.phase]);
 
+  const readyToDeal =
+    !!room &&
+    !!view &&
+    room.phase === "waiting" &&
+    view.playerCount >= 2 &&
+    role === "player" &&
+    !!myPlayer;
+
   const statusLine = useMemo(() => {
     if (!view) return null;
     if (dealCountdown && view.phase === "waiting") {
-      return `Next hand deals in ${dealCountdown}s…`;
+      return `Dealing in ${dealCountdown}s…`;
+    }
+    if (readyToDeal && !dealCountdown && !view.autoDealAt) {
+      return "2 players ready — tap Start hand or wait for auto-deal";
     }
     if (view.statusMessage) return view.statusMessage;
     if (myDemoPlayer?.sitOutNextHand && view.phase === "waiting") {
@@ -215,7 +228,7 @@ export default function DemoTableGameView({
       return "Table full — spectating until a seat opens.";
     }
     return null;
-  }, [view, role, isFull, dealCountdown, myDemoPlayer?.sitOutNextHand]);
+  }, [view, role, isFull, dealCountdown, readyToDeal, myDemoPlayer?.sitOutNextHand]);
 
   if (!view || !room || !sessionId) {
     return (
@@ -259,6 +272,11 @@ export default function DemoTableGameView({
         )}
         {myPlayer && room.phase === "waiting" && (
           <>
+            {readyToDeal && (
+              <TableControlBtn variant="primary" onClick={() => void startHand()}>
+                Start hand
+              </TableControlBtn>
+            )}
             <TableControlBtn variant="danger" onClick={leaveSeat}>
               Leave seat
             </TableControlBtn>
