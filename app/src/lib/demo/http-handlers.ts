@@ -113,7 +113,7 @@ export async function handleDemoJoin(body: {
         role = "player";
       } else {
         room.joinAsSpectator(sessionId, username, placeholderSocket);
-        notice = result.error;
+        notice = "Hand in progress — spectating until this hand ends.";
       }
     } else {
       room.joinAsSpectator(sessionId, username, placeholderSocket);

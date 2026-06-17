@@ -14,10 +14,12 @@ import {
   getWeeklyChampionship,
   GRAND_OPENING_INFO,
   PRIZE_STRUCTURE,
+  FEATURED_TOURNAMENT_ID,
   type TournamentEvent,
   type TournamentStatus,
 } from "@/lib/tournaments";
 import { nextWeeklyTournamentStart } from "@/lib/tournament";
+import TournamentRegisterButton from "@/components/tournaments/TournamentRegisterButton";
 
 function StatusPill({ status }: { status: TournamentStatus }) {
   const map: Record<TournamentStatus, { cls: string; label: string }> = {
@@ -80,7 +82,11 @@ function HeroSection({
             </div>
           </dl>
           <div className="tourney-hero-actions">
-            <ComingSoonCta className="tourney-btn-register" />
+            <TournamentRegisterButton
+              tournamentId={FEATURED_TOURNAMENT_ID}
+              className="tourney-btn-register"
+              label="Register free"
+            />
             <BtnGhost href="#prize-structure" className="tourney-btn-outline">
               Prize structure
             </BtnGhost>
@@ -169,7 +175,7 @@ function EventTableRow({ event }: { event: TournamentEvent }) {
 
 function HowItWorks() {
   const steps = [
-    { n: "1", title: "Coming soon", sub: "Tournament registration opens shortly" },
+    { n: "1", title: "Register free", sub: "Sign in and reserve your bracket seat" },
     { n: "2", title: "Join table", sub: "Buy in at the listed stake tier" },
     { n: "3", title: "Win tournament", sub: "Outlast the field — last stack wins" },
     { n: "4", title: "Get paid instantly", sub: "Prizes settled on-chain" },

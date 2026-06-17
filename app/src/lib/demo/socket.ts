@@ -109,6 +109,7 @@ export function attachDemoHandlers(socket: Socket, io: Server): void {
             socket.emit("demo-join-result", err);
             return err;
           }
+          socket.data.demoSessionId = sessionId;
           room.rebindSocket(sessionId, socket.id);
           const result = {
             ok: true,

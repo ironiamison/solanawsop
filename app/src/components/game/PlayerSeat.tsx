@@ -8,6 +8,7 @@ import { formatTokens } from "@/lib/constants";
 import { playerAvatarUrl } from "@/lib/avatars";
 import { holeCardDealDelay } from "@/lib/game/dealOrder";
 import { PlayerState } from "@/lib/types";
+import type { CSSProperties } from "react";
 
 interface Profile {
   name?: string | null;
@@ -73,7 +74,7 @@ export default function PlayerSeat({
   showHoleCards: boolean;
   inHand?: boolean;
   currentBet: number;
-  seatStyle: { left: string; top: string; transform: string };
+  seatStyle: CSSProperties;
   displayName?: string;
   avatarUrl?: string;
   handLabel?: string | null;

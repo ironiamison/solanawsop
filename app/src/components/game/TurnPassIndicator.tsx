@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { GamePhase } from "@/lib/types";
-import { SEAT_COORDS, clockwisePath, visualSeat } from "./seatCoords";
+import { SEAT_COORDS, seatCoordStyle, clockwisePath, visualSeat } from "./seatCoords";
 
 const HOP_MS = 85;
 
@@ -71,11 +71,7 @@ export default function TurnPassIndicator({
   return (
     <div
       className={`premium-turn-pointer${hopping ? " premium-turn-pointer-hopping" : ""}`}
-      style={{
-        left: coord.left,
-        top: coord.top,
-        transform: coord.transform,
-      }}
+      style={seatCoordStyle(coord)}
       aria-hidden
     >
       <span className="premium-turn-pointer-core" />

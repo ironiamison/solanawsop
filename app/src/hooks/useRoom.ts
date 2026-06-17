@@ -93,20 +93,38 @@ export function useRoomByPubkey(
     setInitialLoadDone(false);
     setLoading(!!roomPubkey);
     refresh();
-    const id = setInterval(() => refresh({ silent: true }), 1500);
+    const pollMs =
+      room && room.phase !== "waiting" && room.phase !== "showdown" ? 700 : 2000;
+    const id = setInterval(() => refresh({ silent: true }), pollMs);
     return () => clearInterval(id);
-  }, [refresh]);
+  }, [refresh, room?.phase]);
 
   useEffect(() => {
     if (!roomPubkey) return;
     const pk = new PublicKey(roomPubkey);
-    const sub = connection.onAccountChange(pk, () => {
-      refresh({ silent: true });
-    });
+    const subs: number[] = [];
+    subs.push(
+      connection.onAccountChange(pk, () => {
+        void refresh({ silent: true });
+      })
+    );
+    if (room) {
+      for (const wallet of room.seats) {
+        if (isEmptySeat(wallet)) continue;
+        const [playerPk] = playerPda(pk, wallet);
+        subs.push(
+          connection.onAccountChange(playerPk, () => {
+            void refresh({ silent: true });
+          })
+        );
+      }
+    }
     return () => {
-      connection.removeAccountChangeListener(sub);
+      for (const sub of subs) {
+        connection.removeAccountChangeListener(sub);
+      }
     };
-  }, [connection, roomPubkey, refresh]);
+  }, [connection, roomPubkey, refresh, room?.seats.map((s) => s.toBase58()).join("|")]);
 
   return { room, players, loading, initialLoadDone, error, refresh };
 }

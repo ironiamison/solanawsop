@@ -10,7 +10,7 @@ import PotDisplay from "./game/PotDisplay";
 import TurnPassIndicator from "./game/TurnPassIndicator";
 import CommunityBoard from "./game/CommunityBoard";
 import DealFlash from "./game/DealFlash";
-import { SEAT_COORDS, visualSeat } from "./game/seatCoords";
+import { SEAT_COORDS, seatCoordStyle, visualSeat } from "./game/seatCoords";
 import ChipFlyLayer from "./game/ChipFlyLayer";
 import TableSoundToggle from "./game/TableSoundToggle";
 import { useHandAnimations } from "@/hooks/useHandAnimations";
@@ -232,11 +232,7 @@ export default function PokerTable({
                   <div
                     key={seatIndex}
                     className="premium-open-seat absolute z-10"
-                    style={{
-                      left: coord.left,
-                      top: coord.top,
-                      transform: coord.transform,
-                    }}
+                    style={seatCoordStyle(coord)}
                   >
                     Open seat
                   </div>
@@ -266,11 +262,7 @@ export default function PokerTable({
                   displayName={nameOverrides?.[seatPk.toBase58()]}
                   avatarUrl={avatarOverrides?.[seatPk.toBase58()]}
                   handLabel={isMe ? heroHandLabel : null}
-                  seatStyle={{
-                    left: coord.left,
-                    top: coord.top,
-                    transform: coord.transform,
-                  }}
+                  seatStyle={seatCoordStyle(coord)}
                   folded={player?.status === "folded"}
                   turnSecondsLeft={isTurn ? turnSecondsLeft : undefined}
                   turnProgress={isTurn ? turnProgress : undefined}

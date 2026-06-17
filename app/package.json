@@ -12,7 +12,11 @@
     "process-assets": "node scripts/process-lobby-assets.mjs",
     "process-brand-chip": "node scripts/process-brand-chip.mjs",
     "postinstall": "prisma generate",
-    "smoke": "bash scripts/smoke-check.sh"
+    "smoke": "bash scripts/smoke-check.sh",
+    "test": "node --import tsx --test src/lib/demo/engine.test.ts",
+    "test:demo-smoke": "tsx scripts/demo-poker-smoke.ts",
+    "db:push": "prisma db push",
+    "db:push:postgres": "prisma db push --schema=prisma/schema.postgres.prisma"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1",

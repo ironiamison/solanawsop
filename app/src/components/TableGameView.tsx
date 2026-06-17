@@ -68,6 +68,8 @@ export default function TableGameView({ roomPubkey }: Props) {
   const [localTurnStartedAt, setLocalTurnStartedAt] = useState<number | undefined>();
   const prevTurnKey = useRef("");
   const autoFoldSent = useRef(false);
+  const autoDealSent = useRef(false);
+  const dealHandRef = useRef<() => void>(() => {});
 
   const myPlayer = getMyPlayer(players, publicKey ?? undefined);
 
@@ -174,14 +176,16 @@ export default function TableGameView({ roomPubkey }: Props) {
     async (label: string, fn: () => Promise<string>) => {
       if (!program) return;
       setTxPending(true);
-      setStatus(`${label}…`);
+      setStatus(`Confirm ${label.toLowerCase()} in your wallet…`);
       try {
         const sig = await fn();
         setLastTxSig(sig);
-        setStatus(null);
+        setStatus(`${label} confirmed · ${sig.slice(0, 8)}…`);
+        window.setTimeout(() => setStatus(null), 4500);
         await refresh();
       } catch (e) {
-        setStatus(e instanceof Error ? e.message : `${label} failed`);
+        const msg = e instanceof Error ? e.message : `${label} failed`;
+        setStatus(msg.includes("User rejected") ? "Transaction cancelled" : msg);
       } finally {
         setTxPending(false);
       }
@@ -235,6 +239,50 @@ export default function TableGameView({ roomPubkey }: Props) {
       return sig;
     });
   };
+
+  dealHandRef.current = handleStartHand;
+
+  useEffect(() => {
+    if (room?.phase !== "waiting") {
+      autoDealSent.current = false;
+    }
+  }, [room?.phase, room?.playerCount]);
+
+  useEffect(() => {
+    if (
+      !room ||
+      !myPlayer ||
+      !program ||
+      !publicKey ||
+      !connection ||
+      txPending ||
+      autoDealSent.current
+    ) {
+      return;
+    }
+    if (room.phase !== "waiting" || room.playerCount < 2) return;
+
+    const lowestSeat = Math.min(...players.map((p) => p.seat));
+    if (myPlayer.seat !== lowestSeat) return;
+
+    const delayMs = (room.handNumber ?? 0) === 0 ? 0 : 3000;
+    const timer = window.setTimeout(() => {
+      if (autoDealSent.current) return;
+      autoDealSent.current = true;
+      dealHandRef.current();
+    }, delayMs);
+    return () => window.clearTimeout(timer);
+  }, [
+    room?.phase,
+    room?.playerCount,
+    room?.handNumber,
+    myPlayer,
+    players,
+    program,
+    publicKey,
+    connection,
+    txPending,
+  ]);
 
   const handleAction = (action: Parameters<typeof playerActionByRoom>[3]) =>
     runTx("Action", () =>
@@ -349,8 +397,29 @@ export default function TableGameView({ roomPubkey }: Props) {
             </div>
           )}
           {status && (
-            <div className="mx-4 mt-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-center text-xs text-amber-200">
+            <div
+              className={`mx-4 mt-2 rounded-lg border px-3 py-2 text-center text-xs ${
+                txPending
+                  ? "border-cyan-500/25 bg-cyan-500/10 text-cyan-100"
+                  : status.includes("confirmed")
+                    ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-200"
+                    : "border-amber-500/20 bg-amber-500/10 text-amber-200"
+              }`}
+            >
               {status}
+              {lastTxSig && status.includes("confirmed") && (
+                <>
+                  {" "}
+                  <a
+                    href={`https://solscan.io/tx/${lastTxSig}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline hover:text-white"
+                  >
+                    Solscan
+                  </a>
+                </>
+              )}
             </div>
           )}
           {room.isPrivate && (
