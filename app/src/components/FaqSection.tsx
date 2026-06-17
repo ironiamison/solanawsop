@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { PUMP_FUN_URL, PRIVATE_TABLE_RAKE_PERCENT, TOKEN_NAME, TOKEN_SYMBOL } from "@/lib/constants";
+import { PUMP_FUN_URL, PRIVATE_TABLE_RAKE_PERCENT, TOKEN_NAME, TOKEN_SYMBOL, TWITTER_HANDLE, TWITTER_URL } from "@/lib/constants";
 
 const FAQ_ITEMS = [
   {
@@ -156,12 +156,12 @@ const FAQ_ITEMS = [
           commitments, and commit–reveal hole cards. We are waiting for an independent
           security audit; auditors can contact us on{" "}
           <a
-            href="https://x.com/solanawsop"
+            href={TWITTER_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="text-violet-400 underline hover:text-violet-300"
           >
-            @solanawsop
+            @{TWITTER_HANDLE}
           </a>
           .
         </p>
