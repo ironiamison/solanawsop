@@ -6,6 +6,7 @@ export interface DemoSpectator {
   sessionId: string;
   username: string;
   socketId: string;
+  lastSeenAt?: number;
 }
 
 export interface DemoPlayer {
@@ -23,6 +24,8 @@ export interface DemoPlayer {
   timeBankMs: number;
   /** Skip the next hand but keep the seat */
   sitOutNextHand: boolean;
+  /** Last client poll / socket activity — used to prune ghost seats */
+  lastSeenAt?: number;
 }
 
 export interface DemoPlayerView {

@@ -14,6 +14,8 @@ import {
   DEMO_ROOM_ID,
   DEMO_SMALL_BLIND,
   DEMO_START_STACK,
+  PLAYER_ABSENT_FOLD_MS,
+  PLAYER_ABSENT_PRUNE_MS,
   SHOWDOWN_DELAY_MS,
 } from "./constants";
 import { compareHands, evaluateHand } from "./handEval";
@@ -26,6 +28,14 @@ import type {
 } from "./types";
 
 const EMPTY_CARD = 255;
+
+function isBotSessionId(sessionId: string): boolean {
+  return sessionId.startsWith("bot-seat-");
+}
+
+function nowMs(): number {
+  return Date.now();
+}
 
 function initDeck(): number[] {
   return Array.from({ length: 52 }, (_, i) => i);
@@ -148,14 +158,57 @@ export class DemoRoomEngine {
     const player = this.players.get(sessionId);
     if (player) {
       player.socketId = socketId;
+      player.lastSeenAt = nowMs();
       return;
     }
     const spec = this.spectators.get(sessionId);
-    if (spec) spec.socketId = socketId;
+    if (spec) {
+      spec.socketId = socketId;
+      spec.lastSeenAt = nowMs();
+    }
   }
 
   hasSession(sessionId: string): boolean {
     return this.players.has(sessionId) || this.spectators.has(sessionId);
+  }
+
+  touchSession(sessionId: string): void {
+    const ts = nowMs();
+    const player = this.players.get(sessionId);
+    if (player) {
+      player.lastSeenAt = ts;
+      return;
+    }
+    const spec = this.spectators.get(sessionId);
+    if (spec) spec.lastSeenAt = ts;
+  }
+
+  /** Drop ghost seats from abandoned browser tabs (humans only, waiting phase). */
+  pruneInactivePlayers(now = nowMs()): boolean {
+    if (this.phase !== "waiting") return false;
+
+    let changed = false;
+    for (const [sessionId, player] of [...this.players.entries()]) {
+      if (isBotSessionId(sessionId)) continue;
+      const lastSeen = player.lastSeenAt ?? 0;
+      if (now - lastSeen <= PLAYER_ABSENT_PRUNE_MS) continue;
+      this.removePlayer(sessionId);
+      changed = true;
+    }
+
+    for (const [sessionId, spec] of [...this.spectators.entries()]) {
+      if (isBotSessionId(sessionId)) continue;
+      const lastSeen = spec.lastSeenAt ?? 0;
+      if (now - lastSeen <= PLAYER_ABSENT_PRUNE_MS) continue;
+      this.spectators.delete(sessionId);
+      changed = true;
+    }
+
+    if (changed) {
+      this.reconcileSeats();
+      this.maybeScheduleAutoDeal();
+    }
+    return changed;
   }
 
   usernameTaken(name: string, exceptSessionId?: string): boolean {
@@ -231,6 +284,7 @@ export class DemoRoomEngine {
       hasActed: false,
       timeBankMs: TIME_BANK_MS,
       sitOutNextHand: false,
+      lastSeenAt: nowMs(),
     };
     this.players.set(sessionId, player);
     this.seatToSession[seat] = sessionId;
@@ -253,6 +307,7 @@ export class DemoRoomEngine {
     if (existing) {
       existing.socketId = socketId;
       existing.username = username;
+      existing.lastSeenAt = nowMs();
       this.maybeScheduleAutoDeal();
       return { ok: true };
     }
@@ -272,6 +327,7 @@ export class DemoRoomEngine {
       hasActed: false,
       timeBankMs: TIME_BANK_MS,
       sitOutNextHand: false,
+      lastSeenAt: nowMs(),
     };
     this.players.set(sessionId, player);
     this.seatToSession[seat] = sessionId;
@@ -289,7 +345,12 @@ export class DemoRoomEngine {
     const seatIdx = this.seatToSession.findIndex((s) => s === sessionId);
     if (seatIdx >= 0) this.seatToSession[seatIdx] = null;
 
-    this.spectators.set(sessionId, { sessionId, username, socketId });
+    this.spectators.set(sessionId, {
+      sessionId,
+      username,
+      socketId,
+      lastSeenAt: nowMs(),
+    });
   }
 
   leaveSeat(sessionId: string): { ok: true } | { ok: false; error: string } {
@@ -309,15 +370,19 @@ export class DemoRoomEngine {
     if (!entry) return;
 
     if ("seat" in entry) {
+      entry.lastSeenAt = 0;
       if (this.phase === "waiting") {
         this.players.delete(entry.sessionId);
         this.seatToSession[entry.seat] = null;
-      } else if (entry.status === "active") {
-        entry.status = "folded";
-        entry.hasActed = true;
-        this.activeCount = Math.max(0, this.activeCount - 1);
-        this.maybeAwardFoldWin();
-        this.advanceAfterAction();
+      } else {
+        entry.sitOutNextHand = true;
+        if (entry.status === "active") {
+          entry.status = "folded";
+          entry.hasActed = true;
+          this.activeCount = Math.max(0, this.activeCount - 1);
+          this.maybeAwardFoldWin();
+          this.advanceAfterAction();
+        }
       }
     } else {
       this.spectators.delete(entry.sessionId);
@@ -410,7 +475,11 @@ export class DemoRoomEngine {
 
   /** Run turn timeouts and scheduled auto-deals */
   tick(): boolean {
-    let changed = this.ensureActiveTurn();
+    let changed = false;
+    if (this.phase === "waiting") {
+      if (this.pruneInactivePlayers()) changed = true;
+    }
+    if (this.ensureActiveTurn()) changed = true;
     if (this.checkTurnTimeout()) changed = true;
     if (this.tryRunOutBoard()) changed = true;
     if (this.processShowdown()) changed = true;
@@ -626,11 +695,17 @@ export class DemoRoomEngine {
 
     const player = this.playerAtSeat(this.currentTurnSeat);
     if (!player || player.status !== "active") return false;
-    if (Date.now() - this.turnStartedAt < ACTION_TIMER_MS + player.timeBankMs) {
-      return false;
-    }
 
-    player.timeBankMs = 0;
+    const now = nowMs();
+    const absent =
+      !isBotSessionId(player.sessionId) &&
+      now - (player.lastSeenAt ?? 0) > PLAYER_ABSENT_FOLD_MS;
+    const timedOut =
+      now - this.turnStartedAt >= ACTION_TIMER_MS + player.timeBankMs;
+
+    if (!absent && !timedOut) return false;
+
+    if (timedOut) player.timeBankMs = 0;
 
     if (player.roundBet >= this.currentBet) {
       player.hasActed = true;
@@ -668,6 +743,7 @@ export class DemoRoomEngine {
     if (!["preFlop", "flop", "turn", "river"].includes(this.phase)) {
       return { ok: false, error: "No active hand" };
     }
+    player.lastSeenAt = nowMs();
     if (player.seat !== this.currentTurnSeat) return { ok: false, error: "Not your turn" };
     if (player.status === "folded") {
       return { ok: false, error: "You folded this hand" };
@@ -1027,6 +1103,8 @@ export class DemoRoomEngine {
       p.hasActed = false;
     }
 
+    this.pruneInactivePlayers();
+
     const ready = this.readyToPlayPlayers();
     if (ready.length >= 2) {
       this.maybeScheduleAutoDeal();
@@ -1150,6 +1228,7 @@ export class DemoRoomEngine {
           ...p,
           timeBankMs: p.timeBankMs ?? TIME_BANK_MS,
           sitOutNextHand: p.sitOutNextHand ?? false,
+          lastSeenAt: p.lastSeenAt ?? 0,
         },
       ])
     );

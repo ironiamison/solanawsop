@@ -15,7 +15,7 @@ export function isBotSession(sessionId: string): boolean {
   return sessionId.startsWith("bot-seat-");
 }
 
-/** Simple exploitable bot — calls often, occasionally raises, folds to big bets */
+/** Simple demo bot — checks and calls often, raises with decent hands / big pots */
 export function pickBotAction(
   room: DemoRoomEngine,
   sessionId: string
@@ -27,26 +27,31 @@ export function pickBotAction(
   const callAmount = Math.max(0, view.currentBet - player.roundBet);
   const canCheck = callAmount === 0;
   const roll = Math.random();
+  const potOdds = view.pot > 0 ? callAmount / (view.pot + callAmount) : 1;
 
-  if (!canCheck && callAmount > player.stack * 0.35 && roll < 0.55) {
+  if (!canCheck && callAmount > player.stack * 0.5 && roll < 0.25) {
     return { type: "fold" };
   }
 
-  if (canCheck && roll < 0.72) {
+  if (!canCheck && potOdds > 0.45 && roll < 0.35) {
+    return { type: "fold" };
+  }
+
+  if (canCheck && roll < 0.45) {
     return { type: "check" };
   }
 
-  if (!canCheck && roll < 0.78) {
+  if (!canCheck && roll < 0.88) {
     return { type: "call" };
   }
 
   const minRaise = view.minRaise || 50_000_000;
   const raiseIncrement = Math.min(
     player.stack - callAmount,
-    Math.max(minRaise, Math.floor(view.pot * 0.5))
+    Math.max(minRaise, Math.floor(view.pot * 0.65))
   );
 
-  if (raiseIncrement >= minRaise && player.stack > callAmount + minRaise) {
+  if (raiseIncrement >= minRaise && player.stack > callAmount + minRaise && roll > 0.35) {
     return { type: "raise", amount: raiseIncrement };
   }
 

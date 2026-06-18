@@ -9,6 +9,10 @@ export const DEMO_BUY_IN = DEMO_START_STACK;
 export const AUTO_DEAL_DELAY_MS = 3000;
 /** First hand after the second player sits — deal on next server tick */
 export const AUTO_DEAL_FIRST_HAND_MS = 0;
+/** Remove seated humans who stopped polling / closed the tab */
+export const PLAYER_ABSENT_PRUNE_MS = 120_000;
+/** Fold absent humans quickly instead of burning the full action timer */
+export const PLAYER_ABSENT_FOLD_MS = 12_000;
 /** Reveal winner/cards before clearing — must be timestamp-driven (serverless-safe) */
 export const SHOWDOWN_DELAY_MS = 3500;
 export {

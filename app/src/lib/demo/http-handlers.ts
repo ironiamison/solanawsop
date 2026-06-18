@@ -11,6 +11,7 @@ import {
   resolveDemoRoomForJoin,
   resolveDemoRoomId,
 } from "@/lib/demo/lobby-registry";
+import { runDemoMaintenance } from "@/lib/demo/bots";
 import type { DemoAction } from "@/lib/demo/types";
 
 export { lobbyStatsFrom };
@@ -22,7 +23,9 @@ function withDemoRoomId<T>(
   const id = normalizeDemoRoomId(roomId);
   return withChipRoom(id, async (room) => {
     await registerDemoRoom(id);
-    return fn(room);
+    const result = await fn(room);
+    runDemoMaintenance(room);
+    return result;
   });
 }
 
@@ -43,6 +46,9 @@ export async function handleDemoState(
     }
   }
   return withDemoRoomId(id, (room) => {
+    if (sessionId && room.hasSession(sessionId)) {
+      room.touchSession(sessionId);
+    }
     if (sessionId && !room.hasSession(sessionId)) {
       return { ok: false as const, error: "Session not found", status: 404 };
     }

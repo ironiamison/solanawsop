@@ -60,6 +60,14 @@ describe("demo engine", () => {
     const join = room.joinAsPlayer("s3", "carol", "sock3");
     assert.equal(join.ok, false);
   });
+
+  it("prunes ghost seats that stopped heartbeating", () => {
+    const room = new DemoRoomEngine({ roomId: "test-prune", startStack: 1_000_000_000 });
+    room.joinAsPlayer("s1", "ghost", "sock1");
+    room.findPlayer("s1")!.lastSeenAt = Date.now() - 200_000;
+    assert.equal(room.pruneInactivePlayers(), true);
+    assert.equal(room.getView().playerCount, 0);
+  });
 });
 
 describe("hand eval", () => {

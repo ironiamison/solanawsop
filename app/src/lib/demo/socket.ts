@@ -12,6 +12,7 @@ import {
 } from "./lobby-registry";
 import { newSessionId, validateUsername } from "./ids";
 import { demoStoreUsesRedis } from "./store";
+import { runDemoMaintenance } from "./bots";
 import type { DemoAction } from "./types";
 import type { DemoRoomEngine } from "./engine";
 
@@ -39,6 +40,7 @@ async function runRoom<T>(
   const id = await registerDemoRoom(roomId).then(() => roomId);
   return withChipRoom(id, async (room) => {
     const result = await fn(room);
+    runDemoMaintenance(room);
     broadcastRoom(io, id, room);
     return result;
   });
@@ -64,7 +66,7 @@ export function wireDemoBroadcast(io: Server): void {
       const ids = await getDemoRoomIds();
       for (const roomId of ids) {
         await withChipRoom(roomId, (room) => {
-          if (room.tick()) broadcastRoom(io, roomId, room);
+          if (runDemoMaintenance(room)) broadcastRoom(io, roomId, room);
         });
       }
     })();
