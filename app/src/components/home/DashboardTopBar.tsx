@@ -28,24 +28,26 @@ export default function DashboardTopBar() {
 
       <DashboardNavBar />
 
-      <TutorialLaunchButton variant="pill" className="hidden sm:inline-flex" />
-
       <div className="dash-topbar-right">
+        <TutorialLaunchButton
+          variant="pill"
+          className="hidden shrink-0 md:inline-flex"
+        />
         {authenticated ? (
-          <Link href="/profile" className="dash-topbar-profile">
+          <Link
+            href="/profile"
+            className="dash-topbar-profile"
+            title={profile.displayName}
+            aria-label={`Profile — ${profile.displayName}`}
+          >
             {profile.avatar ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={profile.avatar} alt="" className="dash-topbar-avatar" />
             ) : (
               <div className="dash-topbar-avatar dash-topbar-avatar--fallback" />
             )}
-            <span className="dash-topbar-profile-name hidden xl:inline">
-              {profile.displayName ?? "Profile"}
-            </span>
           </Link>
-        ) : (
-          <span className="dash-topbar-status hidden text-xs text-zinc-500 sm:inline">Not connected</span>
-        )}
+        ) : null}
         <LoginButton variant="dashboard" />
       </div>
     </header>

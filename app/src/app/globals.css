@@ -203,6 +203,13 @@ body {
   padding: 0.28rem 0.3rem 0.28rem 0.7rem;
 }
 
+.wallet-connected--dashboard {
+  flex-shrink: 0;
+  height: 2rem;
+  padding: 0.15rem 0.2rem 0.15rem 0.55rem;
+  gap: 0.4rem;
+}
+
 .wallet-connected-dot {
   flex-shrink: 0;
   width: 0.4rem;
@@ -353,16 +360,18 @@ body {
 .dash-topbar-right {
   display: flex;
   align-items: center;
-  gap: 0.65rem;
+  gap: 0.5rem;
   justify-self: end;
+  min-width: 0;
+  flex-shrink: 0;
 }
 
 .dash-topbar-profile {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  flex-shrink: 0;
   border-radius: 9999px;
-  padding: 0.2rem 0.65rem 0.2rem 0.2rem;
+  padding: 0.15rem;
   text-decoration: none;
   transition: background 0.15s ease;
 }
@@ -8334,14 +8343,21 @@ html:has(.lobby-shell) {
 }
 
 .site-tour-launch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  height: 2rem;
   border-radius: 999px;
-  border: 1px solid rgba(167, 139, 250, 0.35);
-  background: rgba(109, 40, 217, 0.18);
-  padding: 0.35rem 0.75rem;
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: #e9d5ff;
+  border: 1px solid rgba(167, 139, 250, 0.28);
+  background: rgba(109, 40, 217, 0.12);
+  padding: 0 0.7rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #ddd6fe;
   white-space: nowrap;
+  line-height: 1;
 }
 
 .site-tour-launch:hover {
