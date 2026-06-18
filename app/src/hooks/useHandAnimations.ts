@@ -25,10 +25,16 @@ export function useHandAnimations(phase: GamePhase, communityCount: number) {
       setIsDealing(true);
       const t = window.setTimeout(() => setIsDealing(false), DEAL_MS);
       prevPhase.current = phase;
-      return () => clearTimeout(t);
+      return () => {
+        clearTimeout(t);
+        setIsDealing(false);
+      };
+    }
+    if (phase !== "preFlop" && isDealing) {
+      setIsDealing(false);
     }
     prevPhase.current = phase;
-  }, [phase]);
+  }, [phase, isDealing]);
 
   useEffect(() => {
     if (communityCount > prevCommunityCount.current) {

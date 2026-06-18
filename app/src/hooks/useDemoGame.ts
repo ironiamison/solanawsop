@@ -78,6 +78,43 @@ function lobbyFromTable(table: DemoTableInfo): DemoLobbyStats {
   };
 }
 
+/** Keep hero hole cards visible if a stale broadcast strips them mid-hand */
+function mergeHeroHoleCards(
+  prev: DemoRoomView | null,
+  next: DemoRoomView,
+  sid: string
+): DemoRoomView {
+  if (next.phase === "waiting") return next;
+
+  const nextHero = next.players.find((p) => p.sessionId === sid);
+  if (!nextHero || nextHero.holeCards[0] < 52) return next;
+
+  const prevHero = prev?.players.find((p) => p.sessionId === sid);
+  if (
+    !prevHero ||
+    !prev ||
+    prevHero.holeCards[0] >= 52 ||
+    prev.handNumber !== next.handNumber
+  ) {
+    return next;
+  }
+
+  return {
+    ...next,
+    players: next.players.map((p) =>
+      p.sessionId === sid
+        ? {
+            ...p,
+            holeCards: [prevHero.holeCards[0], prevHero.holeCards[1]] as [
+              number,
+              number,
+            ],
+          }
+        : p
+    ),
+  };
+}
+
 export function useDemoGame() {
   const socketRef = useRef<Socket | null>(null);
   const sessionIdRef = useRef<string | null>(null);
@@ -105,6 +142,11 @@ export function useDemoGame() {
   const reclaimTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const MAX_RECLAIM_ATTEMPTS = 5;
   const lastStateSeqRef = useRef(0);
+  const lastViewRef = useRef<DemoRoomView | null>(null);
+  const heroCardsRef = useRef<{
+    handNumber: number;
+    cards: [number, number];
+  } | null>(null);
 
   const applyStateIfFresh = useCallback(
     (
@@ -117,7 +159,35 @@ export function useDemoGame() {
         return false;
       }
       if (seq > 0) lastStateSeqRef.current = seq;
-      applyViewRole(state, sid, setView, setRole, setLobbyStats, setUsername);
+
+      let merged = state;
+      const hero = state.players.find((p) => p.sessionId === sid);
+      if (hero && hero.holeCards[0] < 52 && state.phase !== "waiting") {
+        heroCardsRef.current = {
+          handNumber: state.handNumber,
+          cards: [hero.holeCards[0], hero.holeCards[1]],
+        };
+      } else if (
+        hero &&
+        hero.holeCards[0] >= 52 &&
+        state.phase !== "waiting" &&
+        heroCardsRef.current?.handNumber === state.handNumber
+      ) {
+        merged = {
+          ...state,
+          players: state.players.map((p) =>
+            p.sessionId === sid
+              ? { ...p, holeCards: [...heroCardsRef.current!.cards] as [number, number] }
+              : p
+          ),
+        };
+      } else if (state.phase === "waiting") {
+        heroCardsRef.current = null;
+      }
+
+      merged = mergeHeroHoleCards(lastViewRef.current, merged, sid);
+      lastViewRef.current = merged;
+      applyViewRole(merged, sid, setView, setRole, setLobbyStats, setUsername);
       return true;
     },
     []

@@ -127,6 +127,8 @@ export default function PlayerSeat({
     avatarUrl ?? profile?.image ?? playerAvatarUrl(displayName ?? name, 96);
 
   const showCards = player && (isMucking || !folded);
+  const heroHasRealCards =
+    isMe && showHoleCards && !!player && player.holeCards[0] < 52;
   const seatFoldedClass =
     folded && !isMucking ? "premium-seat-folded" : isMucking ? "premium-seat-mucking" : "";
 
@@ -135,7 +137,7 @@ export default function PlayerSeat({
       className={`${isMe ? "mb-1" : "mt-0.5"} flex flex-col items-center ${isMe ? "premium-hero-hand" : "premium-villain-hand"}${isMucking ? " premium-hand-muck" : ""}`}
     >
       <div className="flex gap-1">
-        {isDealing && inHand && !isMucking ? (
+        {isDealing && inHand && !isMucking && !heroHasRealCards ? (
           [0, 1].map((i) => (
             <div
               key={`deal-${dealHandId}-${i}`}

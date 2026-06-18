@@ -1219,9 +1219,10 @@ export class DemoRoomEngine {
     const players: DemoRoomView["players"] = [...this.players.values()]
       .sort((a, b) => a.seat - b.seat)
       .map((p) => {
+        const isViewer = forSessionId !== undefined && p.sessionId === forSessionId;
         const hideCards =
           this.phase === "waiting" ||
-          (!showAllCards && p.sessionId !== forSessionId);
+          (!showAllCards && !isViewer);
         return {
           sessionId: p.sessionId,
           username: p.username,
