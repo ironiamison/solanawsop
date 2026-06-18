@@ -9,18 +9,22 @@ import {
   AUTO_DEAL_DELAY_MS,
   AUTO_DEAL_FIRST_HAND_MS,
   DEMO_BIG_BLIND,
+  DEMO_BOTS_ROOM_ID,
   DEMO_BUY_IN,
   DEMO_MAX_PLAYERS,
   DEMO_ROOM_ID,
   DEMO_SMALL_BLIND,
   DEMO_START_STACK,
+  MAX_HAND_HISTORY,
   PLAYER_ABSENT_FOLD_MS,
   PLAYER_ABSENT_PRUNE_MS,
   SHOWDOWN_DELAY_MS,
 } from "./constants";
 import { compareHands, evaluateHand } from "./handEval";
 import type {
+  BotDifficulty,
   DemoAction,
+  DemoHandHistoryEntry,
   DemoHandWin,
   DemoPlayer,
   DemoRoomView,
@@ -55,6 +59,7 @@ function shuffleDeck(deck: number[], seed: number): void {
 export interface DemoRoomOptions {
   roomId?: string;
   startStack?: number;
+  botsOnly?: boolean;
 }
 
 export class DemoRoomEngine {
@@ -81,6 +86,9 @@ export class DemoRoomEngine {
   showdownEndsAt: number | null = null;
   /** Monotonic revision — clients ignore stale HTTP poll payloads */
   stateSeq = 0;
+  botDifficulty: BotDifficulty = "standard";
+  botsOnlyTable = false;
+  handHistory: DemoHandHistoryEntry[] = [];
 
   private showdownTimer: ReturnType<typeof setTimeout> | null = null;
   private stateListeners = new Set<() => void>();
@@ -91,6 +99,18 @@ export class DemoRoomEngine {
   constructor(opts?: DemoRoomOptions) {
     this.roomId = opts?.roomId ?? DEMO_ROOM_ID;
     this.startStack = opts?.startStack ?? DEMO_START_STACK;
+    this.botsOnlyTable =
+      opts?.botsOnly === true || this.roomId === DEMO_BOTS_ROOM_ID;
+  }
+
+  private humanPlayerCount(exceptSessionId?: string): number {
+    let count = 0;
+    for (const player of this.players.values()) {
+      if (isBotSessionId(player.sessionId)) continue;
+      if (exceptSessionId && player.sessionId === exceptSessionId) continue;
+      count++;
+    }
+    return count;
   }
 
   private scaledBlind(multiple: number): number {
@@ -302,6 +322,12 @@ export class DemoRoomEngine {
     if (this.isFull()) {
       return { ok: false, error: "Table full — join as spectator" };
     }
+    if (this.botsOnlyTable && this.humanPlayerCount(sessionId) >= 1) {
+      return {
+        ok: false,
+        error: "Bots-only table — one human seat. Spectate or pick a public table.",
+      };
+    }
     this.spectators.delete(sessionId);
     const existing = this.players.get(sessionId);
     if (existing) {
@@ -333,6 +359,36 @@ export class DemoRoomEngine {
     this.seatToSession[seat] = sessionId;
     this.reconcileSeats();
     this.maybeScheduleAutoDeal();
+    return { ok: true };
+  }
+
+  rebuy(sessionId: string): { ok: true } | { ok: false; error: string } {
+    const player = this.players.get(sessionId);
+    if (!player) return { ok: false, error: "Not seated" };
+    if (this.phase !== "waiting") {
+      return { ok: false, error: "Reload chips between hands only" };
+    }
+    if (player.stack > 0) {
+      return { ok: false, error: "You still have chips" };
+    }
+    player.stack = this.startStack;
+    player.sitOutNextHand = false;
+    this.statusMessage = `${player.username} reloaded play chips`;
+    this.maybeScheduleAutoDeal();
+    return { ok: true };
+  }
+
+  setBotDifficulty(
+    sessionId: string,
+    difficulty: BotDifficulty
+  ): { ok: true } | { ok: false; error: string } {
+    if (!this.hasSession(sessionId)) {
+      return { ok: false, error: "Not at table" };
+    }
+    if (!["casual", "standard", "shark"].includes(difficulty)) {
+      return { ok: false, error: "Invalid bot difficulty" };
+    }
+    this.botDifficulty = difficulty;
     return { ok: true };
   }
 
@@ -1087,6 +1143,7 @@ export class DemoRoomEngine {
   }
 
   private finishHand(): void {
+    this.pushHandHistory();
     this.clearShowdownTimer();
     this.turnStartedAt = 0;
     this.pot = 0;
@@ -1113,6 +1170,47 @@ export class DemoRoomEngine {
         ready.length === 0
           ? "Waiting for players…"
           : "Need 2+ players — others can sit in or take a seat";
+    }
+  }
+
+  private pushHandHistory(): void {
+    const win = this.lastHandWin;
+    if (!win) return;
+
+    const showdownPlayers = [...this.players.values()].filter((player) => {
+      if (player.holeCards[0] >= 52) return false;
+      return (
+        player.status === "active" ||
+        player.status === "allIn" ||
+        win.winnerSessionIds.includes(player.sessionId)
+      );
+    });
+
+    const entry: DemoHandHistoryEntry = {
+      handNumber: win.handNumber,
+      pot: win.pot,
+      winnerSessionIds: [...win.winnerSessionIds],
+      winnerUsernames: win.winnerSessionIds.map(
+        (id) => this.players.get(id)?.username ?? "?"
+      ),
+      communityCards: this.communityCards.slice(0, this.communityCount),
+      endedAt: Date.now(),
+      showdown:
+        showdownPlayers.length > 0
+          ? showdownPlayers.map((player) => ({
+              sessionId: player.sessionId,
+              username: player.username,
+              holeCards: [player.holeCards[0], player.holeCards[1]] as [
+                number,
+                number,
+              ],
+            }))
+          : undefined,
+    };
+
+    this.handHistory.unshift(entry);
+    if (this.handHistory.length > MAX_HAND_HISTORY) {
+      this.handHistory.length = MAX_HAND_HISTORY;
     }
   }
 
@@ -1165,6 +1263,9 @@ export class DemoRoomEngine {
       lastHandWin: this.lastHandWin,
       autoDealAt: this.autoDealAt,
       stateSeq: this.stateSeq,
+      handHistory: [...this.handHistory],
+      botDifficulty: this.botDifficulty,
+      botsOnlyTable: this.botsOnlyTable,
     };
   }
 
@@ -1194,6 +1295,9 @@ export class DemoRoomEngine {
       players: [...this.players.values()],
       spectators: [...this.spectators.values()],
       seatToSession: [...this.seatToSession],
+      handHistory: [...this.handHistory],
+      botDifficulty: this.botDifficulty,
+      botsOnlyTable: this.botsOnlyTable,
     };
   }
 
@@ -1234,6 +1338,10 @@ export class DemoRoomEngine {
     );
     this.spectators = new Map(s.spectators.map((x) => [x.sessionId, x]));
     this.seatToSession = [...s.seatToSession];
+    this.handHistory = s.handHistory ?? [];
+    this.botDifficulty = s.botDifficulty ?? "standard";
+    this.botsOnlyTable =
+      s.botsOnlyTable ?? this.roomId === DEMO_BOTS_ROOM_ID;
     this.stateListeners = new Set();
     this.reconcileSeats();
   }
@@ -1273,6 +1381,9 @@ export interface DemoRoomSnapshot {
   players: DemoPlayer[];
   spectators: DemoSpectator[];
   seatToSession: (string | null)[];
+  handHistory?: DemoHandHistoryEntry[];
+  botDifficulty?: BotDifficulty;
+  botsOnlyTable?: boolean;
 }
 
 /** Local singleton — dev / single-process socket server without Redis */

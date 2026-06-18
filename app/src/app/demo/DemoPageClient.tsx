@@ -14,6 +14,7 @@ export default function DemoPageClient() {
   const {
     join,
     quickJoin,
+    joinBots,
     joinError,
     sessionId,
     joining,
@@ -61,6 +62,7 @@ export default function DemoPageClient() {
         onJoin={() => join(name, !lobbyStats.isFull, selectedRoomId)}
         onSpectate={() => join(name, false, selectedRoomId)}
         onQuickJoin={() => quickJoin(name)}
+        onJoinBots={() => joinBots(name)}
       />
     );
   }

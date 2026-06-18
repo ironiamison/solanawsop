@@ -2,7 +2,7 @@ import { Redis } from "@upstash/redis";
 import { loadChipRoom } from "@/lib/chip-room/store";
 import type { DemoRoomEngine } from "@/lib/demo/engine";
 import type { DemoTableInfo } from "@/lib/demo/types";
-import { DEMO_ROOM_ID } from "./constants";
+import { DEMO_BOTS_ROOM_ID, DEMO_ROOM_ID } from "./constants";
 
 export function lobbyStatsFrom(room: DemoRoomEngine) {
   const view = room.getView();
@@ -29,6 +29,7 @@ function getRedis(): Redis | null {
 }
 
 export function demoTableLabel(roomId: string): string {
+  if (roomId === DEMO_BOTS_ROOM_ID) return "Bots practice";
   if (roomId === DEMO_ROOM_ID) return "Table 1";
   const match = roomId.match(/-(\d+)$/);
   if (match) return `Table ${match[1]}`;
@@ -45,7 +46,7 @@ async function readRegistry(): Promise<string[]> {
   const redis = getRedis();
   if (!redis) {
     if (!globalMem.__demoRegistry) {
-      globalMem.__demoRegistry = [DEMO_ROOM_ID];
+      globalMem.__demoRegistry = [DEMO_ROOM_ID, DEMO_BOTS_ROOM_ID];
     }
     return [...globalMem.__demoRegistry];
   }
@@ -54,7 +55,9 @@ async function readRegistry(): Promise<string[]> {
   if (stored && stored.length > 0) return stored;
 
   const legacy = await redis.get(LEGACY_ROOM_KEY);
-  const initial = legacy ? [DEMO_ROOM_ID] : [DEMO_ROOM_ID];
+  const initial = legacy
+    ? [DEMO_ROOM_ID, DEMO_BOTS_ROOM_ID]
+    : [DEMO_ROOM_ID, DEMO_BOTS_ROOM_ID];
   await redis.set(REGISTRY_KEY, initial);
   return initial;
 }
@@ -71,9 +74,11 @@ async function writeRegistry(ids: string[]): Promise<void> {
 
 export async function registerDemoRoom(roomId: string): Promise<void> {
   const ids = await readRegistry();
-  if (!ids.includes(roomId)) {
-    ids.push(roomId);
-    await writeRegistry(ids);
+  const next = [...ids];
+  if (!next.includes(DEMO_BOTS_ROOM_ID)) next.push(DEMO_BOTS_ROOM_ID);
+  if (!next.includes(roomId)) next.push(roomId);
+  if (next.length !== ids.length || !ids.includes(roomId)) {
+    await writeRegistry(next);
   }
 }
 
@@ -90,6 +95,7 @@ export async function listDemoTables(): Promise<DemoTableInfo[]> {
         label: demoTableLabel(roomId),
         ...stats,
         phase: view.phase,
+        botsOnly: roomId === DEMO_BOTS_ROOM_ID || room.botsOnlyTable,
       };
     })
   );
@@ -100,8 +106,15 @@ export async function listDemoTables(): Promise<DemoTableInfo[]> {
  * else create a new table only when every registered table is full.
  */
 export async function resolveDemoRoomForJoin(
-  preferredRoomId?: string | null
+  preferredRoomId?: string | null,
+  preferBotsOnly = false
 ): Promise<string> {
+  if (preferBotsOnly) {
+    await registerDemoRoom(DEMO_BOTS_ROOM_ID);
+    const botsRoom = await loadChipRoom(DEMO_BOTS_ROOM_ID);
+    if (!botsRoom.isFull()) return DEMO_BOTS_ROOM_ID;
+  }
+
   const ids = await readRegistry();
 
   if (preferredRoomId && ids.includes(preferredRoomId)) {

@@ -5,6 +5,8 @@ import { phaseLabel } from "@/lib/cards";
 import { explorerTxUrl, formatTokens, TOKEN_SYMBOL } from "@/lib/constants";
 import { GamePhase } from "@/lib/types";
 import PlayerAvatar from "@/components/social/PlayerAvatar";
+import DemoHandHistoryList from "@/components/demo/DemoHandHistoryList";
+import type { DemoHandHistoryEntry } from "@/lib/demo/types";
 
 const MISSIONS = [
   { title: "Win 3 hands", progress: 2, total: 3, reward: 15 },
@@ -19,6 +21,8 @@ export default function TableRightPanel({
   spectatorNames = [],
   variant = "live",
   seatedPlayers = [],
+  handHistory = [],
+  mySessionId,
 }: {
   phase: GamePhase;
   roomPubkey: string;
@@ -28,6 +32,8 @@ export default function TableRightPanel({
   spectatorNames?: string[];
   variant?: "live" | "demo";
   seatedPlayers?: { name: string; stack: number; avatar?: string }[];
+  handHistory?: DemoHandHistoryEntry[];
+  mySessionId?: string | null;
 }) {
   const streets: GamePhase[] = ["preFlop", "flop", "turn", "river"];
   const activeIdx = streets.indexOf(phase);
@@ -58,6 +64,13 @@ export default function TableRightPanel({
           )}
         </ul>
       </div>
+
+      {variant === "demo" && (
+        <div className="opoker-panel-card p-3">
+          <h3 className="opoker-panel-title">Recent hands</h3>
+          <DemoHandHistoryList entries={handHistory} mySessionId={mySessionId} />
+        </div>
+      )}
 
       <div className="opoker-panel-card opoker-panel-card-accent p-3">
         <h3 className="opoker-panel-title text-violet-400">

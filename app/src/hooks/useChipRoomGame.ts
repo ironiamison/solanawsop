@@ -218,6 +218,8 @@ export function useChipRoomGame(config: {
     setSitOut,
     sendAction,
     sendMessage: async () => {},
+    rebuy: async () => ({ ok: false, error: "Not available" }),
+    setBotDifficulty: async () => ({ ok: false }),
     leaveTable,
     startHand: async () => {},
     socket: { current: null },

@@ -1,5 +1,8 @@
 export const DEMO_ROOM_ID = "demo-playroom";
+/** Single-human table filled with AI opponents */
+export const DEMO_BOTS_ROOM_ID = "demo-playroom-bots";
 export const DEMO_MAX_PLAYERS = 6;
+export const MAX_HAND_HISTORY = 10;
 /** 100,000 play chips (6 decimal places, matches formatTokens) */
 export const DEMO_START_STACK = 100_000_000_000;
 export const DEMO_SMALL_BLIND = 25_000_000;

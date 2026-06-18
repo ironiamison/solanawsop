@@ -68,6 +68,15 @@ describe("demo engine", () => {
     assert.equal(room.pruneInactivePlayers(), true);
     assert.equal(room.getView().playerCount, 0);
   });
+
+  it("reloads chips when busted between hands", () => {
+    const room = new DemoRoomEngine({ roomId: "test-rebuy", startStack: 1_000_000_000 });
+    room.joinAsPlayer("s1", "hero", "sock1");
+    room.findPlayer("s1")!.stack = 0;
+    const res = room.rebuy("s1");
+    assert.equal(res.ok, true);
+    assert.equal(room.findPlayer("s1")!.stack, 1_000_000_000);
+  });
 });
 
 describe("hand eval", () => {

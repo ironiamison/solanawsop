@@ -2,6 +2,24 @@ import type { GamePhase, PlayerStatus } from "@/lib/types";
 
 export type DemoRole = "player" | "spectator";
 
+export type BotDifficulty = "casual" | "standard" | "shark";
+
+export interface DemoHandHistoryShowdown {
+  sessionId: string;
+  username: string;
+  holeCards: [number, number];
+}
+
+export interface DemoHandHistoryEntry {
+  handNumber: number;
+  pot: number;
+  winnerSessionIds: string[];
+  winnerUsernames: string[];
+  communityCards: number[];
+  endedAt: number;
+  showdown?: DemoHandHistoryShowdown[];
+}
+
 export interface DemoSpectator {
   sessionId: string;
   username: string;
@@ -71,6 +89,9 @@ export interface DemoRoomView {
   autoDealAt: number | null;
   /** Monotonic state revision for stale-client detection */
   stateSeq?: number;
+  handHistory: DemoHandHistoryEntry[];
+  botDifficulty: BotDifficulty;
+  botsOnlyTable: boolean;
 }
 
 export type DemoAction =
@@ -87,4 +108,5 @@ export type DemoTableInfo = {
   isFull: boolean;
   maxPlayers: number;
   phase: GamePhase;
+  botsOnly?: boolean;
 };

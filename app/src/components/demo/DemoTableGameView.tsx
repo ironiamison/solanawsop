@@ -9,6 +9,8 @@ import ActionPanel from "@/components/game/ActionPanel";
 import HandWinToast from "@/components/game/HandWinToast";
 import LoadingLobby from "@/components/loading/LoadingLobby";
 import TableControls, { TableControlBtn } from "@/components/game/TableControls";
+import DemoReactionFloat from "@/components/demo/DemoReactionFloat";
+import DemoTableVibes from "@/components/demo/DemoTableVibes";
 import { BRAND_NAME, formatTokens, TOKEN_SYMBOL } from "@/lib/constants";
 import { evaluateHand } from "@/lib/demo/handEval";
 import {
@@ -22,11 +24,13 @@ import { playerAvatarUrl } from "@/lib/avatars";
 import { DEMO_BIG_BLIND, DEMO_ROOM_ID, DEMO_SMALL_BLIND } from "@/lib/demo/constants";
 import { sessionToPubkey } from "@/lib/demo/ids";
 import { handRankLabel } from "@/lib/handNames";
-import type { DemoAction, DemoRole, DemoRoomView } from "@/lib/demo/types";
+import type { BotDifficulty, DemoAction, DemoRole, DemoRoomView } from "@/lib/demo/types";
 import type { ChatMessage } from "@/hooks/useSocket";
 import { useTurnTimer } from "@/hooks/useTurnTimer";
 import { useHandRewards } from "@/hooks/useHandRewards";
 import { useHandWinCelebration } from "@/hooks/useHandWinCelebration";
+import { useTurnAlerts } from "@/hooks/useTurnAlerts";
+import { useGameSounds } from "@/hooks/useGameSounds";
 
 export type DemoTableGame = {
   connected: boolean;
@@ -44,6 +48,8 @@ export type DemoTableGame = {
   setSitOut: (sitOut: boolean) => Promise<{ ok: boolean; error?: string }>;
   sendAction: (action: DemoAction) => Promise<{ ok: boolean; error?: string }>;
   sendMessage: (text: string, avatar?: string) => Promise<void>;
+  rebuy: () => Promise<{ ok: boolean; error?: string }>;
+  setBotDifficulty: (d: BotDifficulty) => Promise<{ ok: boolean }>;
   socket: React.RefObject<import("socket.io-client").Socket | null>;
   seatDesync?: boolean;
   reconnectSeat?: () => Promise<void>;
@@ -82,6 +88,8 @@ export default function DemoTableGameView({
     setSitOut,
     sendAction,
     sendMessage,
+    rebuy,
+    setBotDifficulty,
     socket,
   } = game;
 
@@ -90,12 +98,29 @@ export default function DemoTableGameView({
   const [betAmount, setBetAmount] = useState(0);
   const [dealCountdown, setDealCountdown] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState(true);
   const lastBetTurnKey = useRef("");
+  const lastTurnSoundKey = useRef("");
+  const lastWinHand = useRef(0);
+  const lastDealHand = useRef(0);
+
+  const { play, setEnabled: setSoundPersist } = useGameSounds();
+
+  useEffect(() => {
+    try {
+      setSoundEnabled(localStorage.getItem("wsop_sound_enabled") !== "0");
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const runAction = async (action: Parameters<typeof sendAction>[0]) => {
     const res = await sendAction(action);
     if (!res.ok) setActionError(res.error ?? "Action failed");
-    else setActionError(null);
+    else {
+      setActionError(null);
+      if (soundEnabled) play("action");
+    }
   };
 
   const myPubkey = sessionId ? sessionToPubkey(sessionId) : null;
@@ -133,6 +158,38 @@ export default function DemoTableGameView({
     !!room &&
     isBettingPhase &&
     room.currentTurnSeat === myPlayer.seat;
+
+  const turnAlertKey = `${view?.handNumber ?? 0}-${room?.currentTurnSeat ?? 0}-${view?.turnStartedAt ?? 0}`;
+
+  useTurnAlerts({
+    enabled: role === "player",
+    isMyTurn: !!isMyTurn,
+    turnKey: turnAlertKey,
+  });
+
+  useEffect(() => {
+    if (!isMyTurn || !soundEnabled) return;
+    if (turnAlertKey === lastTurnSoundKey.current) return;
+    lastTurnSoundKey.current = turnAlertKey;
+    play("turn");
+  }, [isMyTurn, turnAlertKey, soundEnabled, play]);
+
+  useEffect(() => {
+    const win = view?.lastHandWin;
+    if (!win || !sessionId) return;
+    if (!win.winnerSessionIds.includes(sessionId)) return;
+    if (win.handNumber === lastWinHand.current) return;
+    lastWinHand.current = win.handNumber;
+    if (soundEnabled) play("win");
+  }, [view?.lastHandWin, sessionId, soundEnabled, play]);
+
+  useEffect(() => {
+    const n = view?.handNumber ?? 0;
+    if (!soundEnabled || view?.phase !== "preFlop" || n <= 0) return;
+    if (n === lastDealHand.current) return;
+    lastDealHand.current = n;
+    play("deal");
+  }, [view?.handNumber, view?.phase, soundEnabled, play]);
 
   const turnTimerActive = !!(isMyTurn && myPlayer && view?.turnStartedAt);
   const { secondsLeft, progress, urgent, phase: timerPhase } =
@@ -220,7 +277,9 @@ export default function DemoTableGameView({
     if (readyToDeal && !dealCountdown && !view.autoDealAt) {
       return "2 players ready — tap Start hand or wait for auto-deal";
     }
-    if (view.statusMessage) return view.statusMessage;
+    if (view.botsOnlyTable) {
+      return "Bots practice — you vs AI opponents. Tune difficulty below.";
+    }
     if (myDemoPlayer?.sitOutNextHand && view.phase === "waiting") {
       return "You're sitting out — tap I'm back to join the next hand.";
     }
@@ -272,6 +331,11 @@ export default function DemoTableGameView({
         )}
         {myPlayer && room.phase === "waiting" && (
           <>
+            {(myDemoPlayer?.stack ?? 0) === 0 && (
+              <TableControlBtn variant="primary" onClick={() => void rebuy()}>
+                Reload chips
+              </TableControlBtn>
+            )}
             {readyToDeal && (
               <TableControlBtn variant="primary" onClick={() => void startHand()}>
                 Start hand
@@ -321,7 +385,9 @@ export default function DemoTableGameView({
       stack={myPlayer?.stack ?? myDemoPlayer?.stack ?? 100_000_000_000}
       topBanner={topBanner}
       tableArea={
-        <PokerTable
+        <div className="relative h-full w-full">
+          <DemoReactionFloat messages={messages} roomId={activeRoomId} />
+          <PokerTable
           room={room}
           players={players}
           myWallet={myPubkey ?? undefined}
@@ -335,9 +401,22 @@ export default function DemoTableGameView({
             view.players.find((p) => p.seat === room.currentTurnSeat)?.timeBankMs ?? 0
           }
         />
+        </div>
       }
       actionBar={
-        <ActionPanel
+        <>
+          <DemoTableVibes
+            disabled={!connected}
+            botDifficulty={view.botDifficulty ?? "standard"}
+            soundEnabled={soundEnabled}
+            onSend={(text) => sendMessage(text, playerAvatarUrl(username))}
+            onBotDifficultyChange={(d) => void setBotDifficulty(d)}
+            onSoundToggle={(on) => {
+              setSoundEnabled(on);
+              setSoundPersist(on);
+            }}
+          />
+          <ActionPanel
           visible={!!(isMyTurn && myPlayer)}
           showShell={false}
           timerSecondsLeft={turnTimerActive ? secondsLeft : undefined}
@@ -362,6 +441,7 @@ export default function DemoTableGameView({
           }}
           pending={actionPending}
         />
+        </>
       }
       chatDock={
         hideChat ? undefined : (
@@ -388,6 +468,8 @@ export default function DemoTableGameView({
             stack: p.stack,
             avatar: playerAvatarUrl(p.username),
           }))}
+          handHistory={view.handHistory ?? []}
+          mySessionId={sessionId}
         />
       }
     />

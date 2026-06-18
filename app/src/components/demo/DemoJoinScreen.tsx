@@ -35,6 +35,7 @@ export default function DemoJoinScreen({
   onJoin,
   onSpectate,
   onQuickJoin,
+  onJoinBots,
 }: {
   name: string;
   onNameChange: (v: string) => void;
@@ -48,6 +49,7 @@ export default function DemoJoinScreen({
   onJoin: () => void;
   onSpectate: () => void;
   onQuickJoin: () => void;
+  onJoinBots?: () => void;
 }) {
   const normalized = normalizeUsername(name);
   const isValid = validateUsername(name) !== null;
@@ -143,6 +145,11 @@ export default function DemoJoinScreen({
                           <span className="min-w-0">
                             <span className="block text-sm font-medium text-white">
                               {table.label}
+                              {table.botsOnly ? (
+                                <span className="ml-1.5 text-[10px] font-semibold text-violet-400">
+                                  · vs bots
+                                </span>
+                              ) : null}
                             </span>
                             <span className="block text-[10px] capitalize text-zinc-500">
                               {phaseLabel(table.phase)}
@@ -247,6 +254,16 @@ export default function DemoJoinScreen({
                   Spectate
                 </button>
               </div>
+              {onJoinBots ? (
+                <button
+                  type="button"
+                  onClick={onJoinBots}
+                  disabled={!isValid || joining || !connected}
+                  className="demo-join-btn-bots mt-2 w-full"
+                >
+                  Practice vs bots — solo table, adjustable difficulty
+                </button>
+              ) : null}
             </div>
 
             <div className="demo-join-stats">

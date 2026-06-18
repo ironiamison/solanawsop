@@ -12,7 +12,8 @@ import {
   resolveDemoRoomId,
 } from "@/lib/demo/lobby-registry";
 import { runDemoMaintenance } from "@/lib/demo/bots";
-import type { DemoAction } from "@/lib/demo/types";
+import { DEMO_BOTS_ROOM_ID } from "@/lib/demo/constants";
+import type { DemoAction, BotDifficulty } from "@/lib/demo/types";
 
 export { lobbyStatsFrom };
 
@@ -65,6 +66,7 @@ export async function handleDemoState(
 export async function handleDemoJoin(body: {
   username?: string;
   preferPlayer?: boolean;
+  preferBotsOnly?: boolean;
   sessionId?: string;
   roomId?: string;
 }) {
@@ -73,6 +75,8 @@ export async function handleDemoJoin(body: {
   if (!preferPlayer && body.roomId) {
     targetRoomId = normalizeDemoRoomId(body.roomId);
     await registerDemoRoom(targetRoomId);
+  } else if (body.preferBotsOnly) {
+    targetRoomId = await resolveDemoRoomForJoin(DEMO_BOTS_ROOM_ID, true);
   } else {
     targetRoomId = await resolveDemoRoomForJoin(body.roomId);
   }
@@ -286,4 +290,46 @@ export async function handleDemoChatSend(body: {
     text,
   });
   return { ok: true as const, message, status: 200 };
+}
+
+export async function handleDemoRebuy(sessionId: string, roomId?: string) {
+  const id = await resolveDemoRoomId(sessionId, roomId);
+  return withDemoRoomId(id, (room) => {
+    if (!sessionId || !room.findPlayer(sessionId)) {
+      return { ok: false as const, error: "Must be seated", status: 400 };
+    }
+    const result = room.rebuy(sessionId);
+    return {
+      ...result,
+      roomId: room.roomId,
+      state: room.getView(sessionId),
+      lobby: lobbyStatsFrom(room),
+      status: result.ok ? 200 : 400,
+    };
+  });
+}
+
+export async function handleDemoSettings(
+  sessionId: string,
+  botDifficulty: BotDifficulty | undefined,
+  roomId?: string
+) {
+  const id = await resolveDemoRoomId(sessionId, roomId);
+  return withDemoRoomId(id, (room) => {
+    if (!sessionId || !room.hasSession(sessionId)) {
+      return { ok: false as const, error: "Not in demo", status: 400 };
+    }
+    if (!botDifficulty) {
+      return { ok: false as const, error: "Missing botDifficulty", status: 400 };
+    }
+    const result = room.setBotDifficulty(sessionId, botDifficulty);
+    return {
+      ...result,
+      botDifficulty: room.botDifficulty,
+      roomId: room.roomId,
+      state: room.getView(sessionId),
+      lobby: lobbyStatsFrom(room),
+      status: result.ok ? 200 : 400,
+    };
+  });
 }

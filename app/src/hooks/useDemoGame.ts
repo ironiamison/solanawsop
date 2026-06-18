@@ -522,7 +522,12 @@ export function useDemoGame() {
   }, [view, sessionId, username, reconnectSeat, joining]);
 
   const join = useCallback(
-    async (name: string, preferPlayer = true, targetRoomId?: string | null) => {
+    async (
+      name: string,
+      preferPlayer = true,
+      targetRoomId?: string | null,
+      preferBotsOnly = false
+    ) => {
       const valid = validateUsername(name);
       if (!valid) {
         setJoinError("Pick a username (2–16 chars, letters/numbers/_)");
@@ -554,8 +559,9 @@ export function useDemoGame() {
               {
                 username: valid,
                 preferPlayer,
+                preferBotsOnly,
                 sessionId: stored ?? undefined,
-                roomId: room,
+                roomId: preferBotsOnly ? undefined : room,
               },
               18_000
             );
@@ -826,6 +832,28 @@ export function useDemoGame() {
     [join]
   );
 
+  const joinBots = useCallback(
+    (name: string) => join(name, true, null, true),
+    [join]
+  );
+
+  const rebuy = useCallback(async () => {
+    const res = await demoHttpPost("/api/demo/rebuy", {});
+    const sid = sessionIdRef.current;
+    if (res?.state && sid) applyStateIfFresh(res.state, sid);
+    return { ok: Boolean(res?.ok), error: res?.error as string | undefined };
+  }, [demoHttpPost, applyStateIfFresh]);
+
+  const setBotDifficulty = useCallback(
+    async (botDifficulty: import("@/lib/demo/types").BotDifficulty) => {
+      const res = await demoHttpPost("/api/demo/settings", { botDifficulty });
+      const sid = sessionIdRef.current;
+      if (res?.state && sid) applyStateIfFresh(res.state, sid);
+      return { ok: Boolean(res?.ok) };
+    },
+    [demoHttpPost, applyStateIfFresh]
+  );
+
   return {
     connected: serverReady,
     socketLive,
@@ -845,12 +873,15 @@ export function useDemoGame() {
     actionPending,
     join,
     quickJoin,
+    joinBots,
     leaveSeat,
     takeSeat,
     startHand,
     setSitOut,
     sendAction,
     sendMessage,
+    rebuy,
+    setBotDifficulty,
     leaveTable,
     seatDesync,
     reconnectSeat,

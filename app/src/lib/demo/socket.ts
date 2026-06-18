@@ -135,6 +135,7 @@ export function attachDemoHandlers(socket: Socket, io: Server): void {
         username: string;
         sessionId?: string;
         preferPlayer?: boolean;
+        preferBotsOnly?: boolean;
         roomId?: string;
       },
       ack?: (res: unknown) => void
@@ -145,6 +146,8 @@ export function attachDemoHandlers(socket: Socket, io: Server): void {
         if (!preferPlayer && data.roomId) {
           roomId = data.roomId;
           await registerDemoRoom(roomId);
+        } else if (data.preferBotsOnly) {
+          roomId = await resolveDemoRoomForJoin(undefined, true);
         } else {
           roomId = await resolveDemoRoomForJoin(data.roomId);
         }
