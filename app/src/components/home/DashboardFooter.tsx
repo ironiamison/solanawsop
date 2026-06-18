@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import BrandChipMark from "@/components/brand/BrandChipMark";
+import TutorialLaunchButton from "@/components/tutorial/TutorialLaunchButton";
 import { TWITTER_HANDLE, TWITTER_URL } from "@/lib/constants";
 
 export default function DashboardFooter({
@@ -24,6 +25,7 @@ export default function DashboardFooter({
         {totalPlayers > 0 && <span>{totalPlayers.toLocaleString()} players</span>}
       </div>
       <div className="flex items-center gap-4">
+        <TutorialLaunchButton variant="link" allowReplay />
         <Link href="/docs" className="transition hover:text-zinc-400">Docs</Link>
         <Link href="/fairness" className="transition hover:text-zinc-400">Fairness</Link>
         <a

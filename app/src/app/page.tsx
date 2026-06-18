@@ -12,6 +12,7 @@ import PlayerStatsCard from "@/components/home/PlayerStatsCard";
 import HomeLeaderboard from "@/components/home/HomeLeaderboard";
 import ChainTablesSetupBanner from "@/components/home/ChainTablesSetupBanner";
 import GettingStartedCard from "@/components/home/GettingStartedCard";
+import TutorialWelcomeBanner from "@/components/tutorial/TutorialWelcomeBanner";
 import SocialDiscoverCard from "@/components/home/SocialDiscoverCard";
 import TestUsOutCard from "@/components/home/TestUsOutCard";
 import LoadingLobby from "@/components/loading/LoadingLobby";
@@ -94,6 +95,8 @@ export default function Home() {
       {status && tablesDeployed && (
         <p className="mb-2 text-xs text-zinc-600">{status}</p>
       )}
+
+      <TutorialWelcomeBanner />
 
       <GettingStartedCard />
 

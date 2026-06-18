@@ -52,6 +52,7 @@ export default function PracticePage() {
 
   return (
     <GuestGatedContent tab="tables">
+      <div data-tour="bot-practice">
       <div className="mb-3 px-2">
         <Link href="/profile?tab=tables" className="text-xs text-violet-400 hover:text-violet-300">
           ← Back to private tables
@@ -78,6 +79,7 @@ export default function PracticePage() {
           </div>
         </div>
       )}
+      </div>
     </GuestGatedContent>
   );
 }

@@ -206,7 +206,7 @@ function ProfileContent() {
       )}
 
       {tab === "tables" && (
-        <div className="profile-tables-stack flex flex-col gap-8">
+        <div className="profile-tables-stack flex flex-col gap-8" data-tour="private-tables">
           <ProfileSection
             title="Private tables · SOL"
             subtitle="On-chain invite-only games with real SOL buy-ins"

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
 import AppPrivyProvider from "@/components/PrivyProvider";
 import ReferralCapture from "@/components/rewards/ReferralCapture";
+import TutorialRoot from "@/components/tutorial/TutorialRoot";
 import { APP_URL } from "@/lib/constants";
 import "./globals.css";
 
@@ -55,7 +56,9 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <ReferralCapture />
-        <AppPrivyProvider>{children}</AppPrivyProvider>
+        <AppPrivyProvider>
+          <TutorialRoot>{children}</TutorialRoot>
+        </AppPrivyProvider>
       </body>
     </html>
   );

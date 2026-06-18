@@ -8,6 +8,7 @@ import { usePrivyProfile } from "@/hooks/usePrivyProfile";
 import { usePokerProgram } from "@/hooks/usePokerProgram";
 import { SHOW_NETWORK_BADGE, SOLANA_NETWORK } from "@/lib/constants";
 import { LiveDot } from "./lobby";
+import TutorialLaunchButton from "@/components/tutorial/TutorialLaunchButton";
 
 export default function DashboardTopBar() {
   const profile = usePrivyProfile();
@@ -26,6 +27,8 @@ export default function DashboardTopBar() {
       </div>
 
       <DashboardNavBar />
+
+      <TutorialLaunchButton variant="pill" className="hidden sm:inline-flex" />
 
       <div className="dash-topbar-right">
         {authenticated ? (

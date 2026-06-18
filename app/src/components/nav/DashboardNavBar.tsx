@@ -5,7 +5,7 @@ import DashboardNavLinks from "./DashboardNavLinks";
 
 export default function DashboardNavBar() {
   return (
-    <div className="dash-nav-slot hidden lg:flex">
+    <div className="dash-nav-slot hidden lg:flex" data-tour="top-nav">
       <Suspense fallback={<div className="dash-nav-skeleton" aria-hidden />}>
         <DashboardNavLinks />
       </Suspense>

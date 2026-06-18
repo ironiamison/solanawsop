@@ -267,7 +267,7 @@ export default function TournamentsPageContent() {
   }, []);
 
   return (
-    <div className="tourney-page">
+    <div className="tourney-page" data-tour="tournaments-page">
       <HeroSection event={featured} regCountdown={regCountdown} />
 
       <section className="tourney-featured-section">

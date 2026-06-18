@@ -40,7 +40,7 @@ export default function ProfileHero({
     : null;
 
   return (
-    <div className="profile-hero">
+    <div className="profile-hero" data-tour="profile-hero">
       <div className="profile-hero-banner" aria-hidden />
       <div className="profile-hero-body">
         <div className="profile-hero-main">

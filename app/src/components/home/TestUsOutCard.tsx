@@ -6,7 +6,7 @@ import { TOKEN_SYMBOL } from "@/lib/constants";
 
 export default function TestUsOutCard() {
   return (
-    <section className="test-us-out-card">
+    <section className="test-us-out-card" data-tour="free-play">
       <Image
         src="/assets/lobby/test-us-out-bg.png"
         alt=""
